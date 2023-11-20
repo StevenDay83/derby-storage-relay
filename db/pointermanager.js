@@ -24,7 +24,7 @@ module.exports = class PointerStorageManagement {
 
     rehashPointerIndexer(callback) {
         try {
-            let uniquePublicKeyQuery = 'SELECT pubkey, count(id) as "count", sum(size) as "totalsize" from pointers group by pubkey';
+            let uniquePublicKeyQuery = 'SELECT pubkey, count(id) as "count", sum(size) as "totalsize" from Pointers group by pubkey';
 
             this.executePointerQuery(uniquePublicKeyQuery,undefined, (err, rows) => {
                 if (!err){
