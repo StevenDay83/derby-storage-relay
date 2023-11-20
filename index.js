@@ -74,7 +74,7 @@ let testSearch = {ids:["12345"],owners:["6789"],olderthan:1697420666,pointerhash
 
 
 Logger.WriteInfoLog("Initializing connection to database at " + GlobalSettings.database.host + (GlobalSettings.database.port ? ':' + GlobalSettings.database.port : ""));
-pointerMgr.initializeDatabase(err => {
+pointerMgr.rehashPointerIndexer(err => {
     if (err){
         console.error(err);
     } else {

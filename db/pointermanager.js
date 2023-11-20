@@ -18,6 +18,55 @@ module.exports = class PointerStorageManagement {
             password:this.RelaySettings.database.password,
             database:this.RelaySettings.database.pointerDatabase
         };
+        this.pointerIndex = {
+        };
+    }
+
+    rehashPointerIndexer(callback) {
+        try {
+            let uniquePublicKeyQuery = 'SELECT pubkey, count(id) as "count", sum(size) as "totalsize" from pointers group by pubkey';
+
+            this.executePointerQuery(uniquePublicKeyQuery,undefined, (err, rows) => {
+                if (!err){
+                    if (rows && rows.length > 0){
+
+                        rows.forEach(uniqueKeyRow => {
+                            let thisKey = uniqueKeyRow["pubkey"];
+                            let thisPubkeyPointerCount = Number(uniqueKeyRow["count"]);
+                            let thisPubKeyPointerSum = uniqueKeyRow["totalsize"];
+
+                            this.pointerIndex[thisKey] = {
+                                pointerCount:thisPubkeyPointerCount,
+                                pointerHashSum:thisPubKeyPointerSum
+                            };
+                        });
+                        console.log(JSON.stringify(this.pointerIndex, undefined, 4));
+                    }
+                    callback(undefined);
+                } else {
+                    throw err;
+                }
+            });
+        } catch(e) {
+            callback(e);
+        }
+    }
+
+    updateIndexer(key, addCount, addSize) {
+        if (this.pointerIndex[key]) {
+            this.pointerIndex[key].pointerCount += addCount != undefined? addCount : 0;
+            this.pointerIndex[key].pointerHashSum += addSize != undefined ? addSize : 0;
+
+            if (this.pointerIndex[key].pointerCount == 0){
+                delete this.pointerIndex[key];
+            }
+        } else {
+            // New unique key
+            this.pointerIndex[key] = {
+                pointerCount:addCount != undefined ? addCount : 0,
+                pointerHashSum:addSize != undefined ? addSize : 0
+            }
+        }
     }
 
     initializeDatabase(callback){
@@ -60,13 +109,14 @@ module.exports = class PointerStorageManagement {
                         }
                     }
                 ).catch(err => {
-                    callback(err)
+                    throw err;
                 }).finally(() => {
                     newConnection.end();
                 });
             }
         ).catch(err => {
-            callback(err);
+            // callback(err);
+            throw err;
         });
     }
 
@@ -143,6 +193,7 @@ module.exports = class PointerStorageManagement {
                                                                                                 ' VALUES (?, ?, ?, ?, ?, ?, ?)',
                                                                                                 SQLValues).then((res) => {
                                                                                                     if (res && res.affectedRows == 1){
+                                                                                                            this.updateIndexer(newPointer.pubkey, 1, newPointer.size);
                                                                                                             callback(undefined, newPointer.id, newPointer.pointerhash);
                                                                                                         } else {
                                                                                                            callback(new Error("SQL Error"), undefined, undefined); 
@@ -158,6 +209,7 @@ module.exports = class PointerStorageManagement {
                                                                                                 ' VALUES (?, ?, ?, ?, ?, ?, ?)', SQLValues, (err, response) => {
                                                                                                     if (!err) {
                                                                                                         if (response && response.affectedRows == 1){
+                                                                                                            this.updateIndexer(newPointer.pubkey, 1, newPointer.size);
                                                                                                             callback(undefined, newPointer.id, newPointer.pointerhash);
                                                                                                         } else {
                                                                                                            callback(new Error("SQL Error"), undefined, undefined); 
@@ -284,7 +336,15 @@ module.exports = class PointerStorageManagement {
                     SQLValues, (err, response) => {
                         if (!err) {
                             if (response && response.affectedRows > 0) {
-                                callback(undefined, newPointerObject.id);
+                                this.executePointerQuery(deleteSQLString, oldPointerId, (err2, response2) => {
+                                    if (!err2) {
+                                        if (response2 && response2.affectedRows > 0) {
+                                            callback(undefined, newPointerObject.id);
+                                        }
+                                    } else {
+                                        throw err2;
+                                    }
+                                });
                             }
                         } else {
                             throw err;
@@ -325,6 +385,7 @@ module.exports = class PointerStorageManagement {
                                 && pointerResult.nonce != deletionValidationPointer.nonce){
                                 this._removePointerInternal(pointerResult, (err, deletedPointerId) => {
                                     if (!err) {
+                                        this.updateIndexer(pointerResult.pubkey, -1, -pointerResult.size);
                                         callback(undefined, deletedPointerId);
                                     } else {
                                         callback(err, undefined);
