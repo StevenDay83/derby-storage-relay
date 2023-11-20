@@ -192,6 +192,10 @@ module.exports = class StorageRelayServer {
                                 try {
                                     let requestId = newMessageJSON[1];
                                     let requestCriteria = newMessageJSON[2];
+
+                                    if (!requestCriteria.limit || requestCriteria.limit >= 1000){
+                                        requestCriteria.limit = 1000;
+                                    }
                                     this.PointerManager.getPointerByCriteria(requestCriteria, (err, results) => {
                                         if (!err){
                                             let responseJSON = [

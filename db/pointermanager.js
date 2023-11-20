@@ -594,9 +594,10 @@ module.exports = class PointerStorageManagement {
 
                 if (limit){
                     queryString += " limit " + limit;
-                } else {
-                    queryString += " limit " + 1000;
-                }
+                } 
+                // else {
+                //     queryString += " limit " + 1000;
+                // }
                 console.log(queryString);
                 // OLD
                 // this.DBConnection.query(queryString).then((rows) => {
