@@ -4,6 +4,7 @@ const pointertools = require('../pointer/pointer.js');
 const ErrorManager = require('../server/error.js');
 const sha256 = require('sha256');
 const mariaDB = require('mariadb');
+const StoageNodeFilter = require('./filter.js');
 
 module.exports = class PointerStorageManagement {
     constructor(relaySettings, dataStorageManager){
@@ -20,6 +21,13 @@ module.exports = class PointerStorageManagement {
         };
         this.pointerIndex = {
         };
+
+        this.PubKeyFilter = new StoageNodeFilter.KeysFilterManager(relaySettings, this.pointerIndex);
+
+        this.PubKeyFilter.loadFilterGroups();
+        this.PubKeyFilter.loadFilterKeys();
+
+        console.log(this.PubKeyFilter);
     }
 
     rehashPointerIndexer(callback) {

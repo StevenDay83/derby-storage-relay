@@ -1,39 +1,39 @@
 {
     "root_level":{
         "settings":{
-            "canPublish":true,
-            "canReplace":true,
-            "canDelete":true,
-            "pointerExpiration":0,
-            "maximumPointers":0,
-            "maximumPointerHashSize":0
+            "canpublish":true,
+            "canreplace":true,
+            "candelete":true,
+            "pointerexpiration":0,
+            "maximumpointers":0,
+            "maximumpointerhashsize":0
         }
     },
     "block":{
         "settings":{
-            "canPublish":false,
-            "canReplace":false,
-            "canDelete":false
+            "canpublish":false,
+            "canreplace":false,
+            "candelete":false
         }
     },
     "registered":{
         "settings":{
-            "canPublish":true,
-            "canReplace":true,
-            "canDelete":true,
-            "pointerExpiration":7884000,
-            "maximumPointers":1000,
-            "maximumPointerHashSize":1000000000
+            "canpublish":true,
+            "canreplace":true,
+            "candelete":true,
+            "pointerexpiration":7884000,
+            "maximumpointers":1000,
+            "maximumpointerhashsize":1000000000
         }
     },
     "default":{
         "settings":{
-            "canPublish":true,
-            "canReplace":true,
-            "canDelete":true,
-            "pointerExpiration":7884000,
-            "maximumPointers":1000,
-            "maximumPointerHashSize":50000000
+            "canpublish":true,
+            "canreplace":true,
+            "candelete":true,
+            "pointerexpiration":7884000,
+            "maximumpointers":1000,
+            "maximumpointerhashsize":50000000
         }
     }
 }
