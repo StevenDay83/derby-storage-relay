@@ -53,7 +53,7 @@ class KeysFilterManager {
                 Object.keys(filterGroupFileDataJSON).length > 0 && filterGroupFileDataJSON.default){
                     this.FilterGroup = filterGroupFileDataJSON;
 
-                    Object.keys(this.FilterGroup).every(thisGroup => {
+                    Object.keys(this.FilterGroup).forEach(thisGroup => {
                         this.FilterGroup[thisGroup].settings[CAN_PUBLISH] = this.FilterGroup[thisGroup].settings[CAN_PUBLISH] ? true : false;
                         this.FilterGroup[thisGroup].settings[CAN_REPLACE] = this.FilterGroup[thisGroup].settings[CAN_REPLACE] ? true : false;
                         this.FilterGroup[thisGroup].settings[CAN_DELETE] = this.FilterGroup[thisGroup].settings[CAN_DELETE] ? true : false;
@@ -69,11 +69,11 @@ class KeysFilterManager {
                         this.FilterGroup[thisGroup].settings[MAX_POINTERHASH_SIZE] = this.FilterGroup[thisGroup].settings[MAX_POINTERHASH_SIZE] != undefined  && 
                         Number(this.FilterGroup[thisGroup].settings[MAX_POINTERHASH_SIZE]) >= 0 ? 
                         this.FilterGroup[thisGroup].settings[MAX_POINTERHASH_SIZE] : 0;
-                        success = true;
                     });
                 } else {
                     this.FilterGroup = DEFAULT_FILTER_GROUP;
                 }
+                success = true;
         } catch (e) {
             throw e;
         }
@@ -106,9 +106,11 @@ class KeysFilterManager {
             if (this.FilterGroup[thisGroup]){
                 let thisKeyArray = this.PublicKeysFilter[thisGroup];
 
-                if (thisKeyArray.indexOf(publicKey) != -1) {
+                if (thisKeyArray && thisKeyArray.length > 0 && thisKeyArray.indexOf(publicKey) != -1) {
                     thisFilterGroup = this.FilterGroup[thisGroup];
                     return false;
+                } else {
+                    return true;
                 }
             } else {
                 return true;
@@ -120,11 +122,12 @@ class KeysFilterManager {
 
     filterPointerByAction(pointer, action){
         let deny;
+        let filterGroup;
 
         try {
             if (pointer && action) {
                 let thisPubkey = pointer.pubkey;
-                let filterGroup = this.getFilterGroupByPubkey(thisPubkey);
+                filterGroup = this.getFilterGroupByPubkey(thisPubkey);
 
                 switch(action.toLowerCase()) {
                     case "publish":{
@@ -140,8 +143,8 @@ class KeysFilterManager {
                                 }
                             }
 
-                            if (filterGroup.settings[MAX_POINTERHASH_SIZE != 0]){
-                                if (pubKeyHashSum > filterGroup[MAX_POINTERHASH_SIZE]){
+                            if (filterGroup.settings[MAX_POINTERHASH_SIZE] != 0){
+                                if (pubKeyHashSum > filterGroup.settings[MAX_POINTERHASH_SIZE]){
                                     deny = POINTER_SIZE_QUOTA;
                                 }
                             }
@@ -173,7 +176,10 @@ class KeysFilterManager {
             console.error(e);
         }
 
-        return deny;
+        return {
+            filtergroup:filterGroup,
+            action:deny
+        };
     }
 }
 

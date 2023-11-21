@@ -105,6 +105,8 @@ module.exports = class StorageRelayServer {
 
                                                 if (!this._sendErrorMessage(socket, e)){
                                                     console.error(e);
+                                                } else {
+                                                    Logger.WriteErrorLog("Error publishing pointer: " + e.message);
                                                 }
                                             }
                                         });

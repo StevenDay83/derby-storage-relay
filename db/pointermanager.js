@@ -4,7 +4,7 @@ const pointertools = require('../pointer/pointer.js');
 const ErrorManager = require('../server/error.js');
 const sha256 = require('sha256');
 const mariaDB = require('mariadb');
-const StoageNodeFilter = require('./filter.js');
+const StorageNodeFilter = require('./filter.js');
 
 module.exports = class PointerStorageManagement {
     constructor(relaySettings, dataStorageManager){
@@ -22,7 +22,7 @@ module.exports = class PointerStorageManagement {
         this.pointerIndex = {
         };
 
-        this.PubKeyFilter = new StoageNodeFilter.KeysFilterManager(relaySettings, this.pointerIndex);
+        this.PubKeyFilter = new StorageNodeFilter.KeysFilterManager(relaySettings, this.pointerIndex);
 
         this.PubKeyFilter.loadFilterGroups();
         this.PubKeyFilter.loadFilterKeys();
@@ -147,161 +147,176 @@ module.exports = class PointerStorageManagement {
                     let timeNow = Math.floor(Date.now() / 1000);
                     let timeDelta = Math.abs(timeStamp - timeNow);
 
-                    // Check time delta
-                    // If time delta is 0, any time is permissible
-                    // TODO: May want to prevent future dates no matter what
-                    if ((this.RelaySettings.pointer.timestampDelta == 0 ? true : false) || timeDelta <= this.RelaySettings.pointer.timestampDelta){
-                        let newPointerId = newPointer.id;
+                    let filterActionPublish = this.PubKeyFilter.filterPointerByAction(newPointer, "publish");
 
-                        this.getPointerById(newPointerId, (err, result) => { // Check for existing duplicate ID
-                            try {
-                                if (!err){
-                                    if (!result){
-                                        // Check if this is a replacement by looking at
-                                        // PointerHash and Pubkey
-                                        // If there is an existing PointerHash and PubKey, treat as a replacement
-                                        let pointerSearchCriteria = {
-                                            owners:[newPointer.pubkey],
-                                            pointerhashes:[newPointer.pointerhash]
-                                        };
+                    console.log("Publish filter: " + JSON.stringify(filterActionPublish)); // Debug for filter
 
-                                        this.getPointerByCriteria(pointerSearchCriteria, (err, results) => {
-                                            try {
-                                                if (!err) {
-                                                    if (results && results.length == 0) { // No existing pubkey claim on data
-                                                        // New Pointer
-                                                        if (blob && blob.length > 0){
-                                                            if (binarytools.isBase64Data(blob)){
-                                                                // Verify converted binary matches pointerhash
-                                                                let bufferData = binarytools.getBufferData(blob);
-                                                                let bufferDataHash = binarytools.getDataHash(bufferData);
-
-                                                                if (bufferDataHash == newPointer.pointerhash){
-                                                                    if (bufferData.length <= this.RelaySettings.storage.dataBlockLimit){
-                                                                        if (bufferData.length == newPointer.size){
-                                                                            // Write data to disk
-                                                                            this.DataStorageManager.publishData(bufferData, (err, dataHash) => {
-                                                                                try {
-                                                                                    if (!err){
-                                                                                        // Write pointer to Database
-                                                                                        let SQLValues = [
-                                                                                            newPointer.id,
-                                                                                            newPointer.pubkey,
-                                                                                            newPointer.timestamp,
-                                                                                            newPointer.pointerhash,
-                                                                                            newPointer.size,
-                                                                                            newPointer.nonce,
-                                                                                            newPointer.signature
-                                                                                        ];
-                                                                                        let useOld = false;
-
-                                                                                        if (useOld){
-                                                                                            // A Rock
-                                                                                            this.DBConnection.query(insertSQLString +
-                                                                                                ' VALUES (?, ?, ?, ?, ?, ?, ?)',
-                                                                                                SQLValues).then((res) => {
-                                                                                                    if (res && res.affectedRows == 1){
-                                                                                                            this.updateIndexer(newPointer.pubkey, 1, newPointer.size);
-                                                                                                            callback(undefined, newPointer.id, newPointer.pointerhash);
+                    if (filterActionPublish.action == StorageNodeFilter.POINTER_ACCEPTED){
+                        // Check time delta
+                        // If time delta is 0, any time is permissible
+                        // TODO: May want to prevent future dates no matter what
+                        if ((this.RelaySettings.pointer.timestampDelta == 0 ? true : false) || timeDelta <= this.RelaySettings.pointer.timestampDelta){
+                            let newPointerId = newPointer.id;
+    
+                            this.getPointerById(newPointerId, (err, result) => { // Check for existing duplicate ID
+                                try {
+                                    if (!err){
+                                        if (!result){
+                                            // Check if this is a replacement by looking at
+                                            // PointerHash and Pubkey
+                                            // If there is an existing PointerHash and PubKey, treat as a replacement
+                                            let pointerSearchCriteria = {
+                                                owners:[newPointer.pubkey],
+                                                pointerhashes:[newPointer.pointerhash]
+                                            };
+    
+                                            this.getPointerByCriteria(pointerSearchCriteria, (err, results) => {
+                                                try {
+                                                    if (!err) {
+                                                        if (results && results.length == 0) { // No existing pubkey claim on data
+                                                            // New Pointer
+                                                            if (blob && blob.length > 0){
+                                                                if (binarytools.isBase64Data(blob)){
+                                                                    // Verify converted binary matches pointerhash
+                                                                    let bufferData = binarytools.getBufferData(blob);
+                                                                    let bufferDataHash = binarytools.getDataHash(bufferData);
+    
+                                                                    if (bufferDataHash == newPointer.pointerhash){
+                                                                        if (bufferData.length <= this.RelaySettings.storage.dataBlockLimit){
+                                                                            if (bufferData.length == newPointer.size){
+                                                                                // Write data to disk
+                                                                                this.DataStorageManager.publishData(bufferData, (err, dataHash) => {
+                                                                                    try {
+                                                                                        if (!err){
+                                                                                            // Write pointer to Database
+                                                                                            let SQLValues = [
+                                                                                                newPointer.id,
+                                                                                                newPointer.pubkey,
+                                                                                                newPointer.timestamp,
+                                                                                                newPointer.pointerhash,
+                                                                                                newPointer.size,
+                                                                                                newPointer.nonce,
+                                                                                                newPointer.signature
+                                                                                            ];
+                                                                                            let useOld = false;
+    
+                                                                                            if (useOld){
+                                                                                                // A Rock
+                                                                                                this.DBConnection.query(insertSQLString +
+                                                                                                    ' VALUES (?, ?, ?, ?, ?, ?, ?)',
+                                                                                                    SQLValues).then((res) => {
+                                                                                                        if (res && res.affectedRows == 1){
+                                                                                                                this.updateIndexer(newPointer.pubkey, 1, newPointer.size);
+                                                                                                                callback(undefined, newPointer.id, newPointer.pointerhash);
+                                                                                                            } else {
+                                                                                                               callback(new Error("SQL Error"), undefined, undefined); 
+                                                                                                            }
+                                                                                                    }).catch(err => {
+                                                                                                        let criticalSQLError = ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.NOTICE,
+                                                                                                            newPointer ? newPointer.id : "", "Critcal error publishing pointer");
+                                                                                                        callback(criticalSQLError, undefined, undefined); 
+                                                                                                    });
+                                                                                                // A hard place
+                                                                                            } else {
+                                                                                                this.executePointerQuery(insertSQLString +
+                                                                                                    ' VALUES (?, ?, ?, ?, ?, ?, ?)', SQLValues, (err, response) => {
+                                                                                                        if (!err) {
+                                                                                                            if (response && response.affectedRows == 1){
+                                                                                                                this.updateIndexer(newPointer.pubkey, 1, newPointer.size);
+                                                                                                                callback(undefined, newPointer.id, newPointer.pointerhash);
+                                                                                                            } else {
+                                                                                                               callback(new Error("SQL Error"), undefined, undefined); 
+                                                                                                            }
                                                                                                         } else {
-                                                                                                           callback(new Error("SQL Error"), undefined, undefined); 
+                                                                                                            callback(new Error("SQL Error"), undefined, undefined); 
                                                                                                         }
-                                                                                                }).catch(err => {
-                                                                                                    let criticalSQLError = ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.NOTICE,
-                                                                                                        newPointer ? newPointer.id : "", "Critcal error publishing pointer");
-                                                                                                    callback(criticalSQLError, undefined, undefined); 
-                                                                                                });
-                                                                                            // A hard place
+                                                                                                    });
+                                                                                            }
+    
+    
                                                                                         } else {
-                                                                                            this.executePointerQuery(insertSQLString +
-                                                                                                ' VALUES (?, ?, ?, ?, ?, ?, ?)', SQLValues, (err, response) => {
-                                                                                                    if (!err) {
-                                                                                                        if (response && response.affectedRows == 1){
-                                                                                                            this.updateIndexer(newPointer.pubkey, 1, newPointer.size);
-                                                                                                            callback(undefined, newPointer.id, newPointer.pointerhash);
-                                                                                                        } else {
-                                                                                                           callback(new Error("SQL Error"), undefined, undefined); 
-                                                                                                        }
-                                                                                                    } else {
-                                                                                                        callback(new Error("SQL Error"), undefined, undefined); 
-                                                                                                    }
-                                                                                                });
+                                                                                            throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.NOTICE,
+                                                                                                newPointer ? newPointer.id : "","Critical error saving data");
                                                                                         }
-
-
-                                                                                    } else {
-                                                                                        throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.NOTICE,
-                                                                                            newPointer ? newPointer.id : "","Critical error saving data");
+                                                                                    } catch (e) {
+                                                                                        console.log(e);
+                                                                                        callback(e, undefined, undefined);
                                                                                     }
-                                                                                } catch (e) {
-                                                                                    console.log(e);
-                                                                                    callback(e, undefined, undefined);
-                                                                                }
-                                                                            });
+                                                                                });
+                                                                            } else {
+                                                                                // throw new Error("Data size mismatch of data");
+                                                                                throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_SIZE,
+                                                                                    newPointer.id, "Data size mismatch");
+                                                                            }
                                                                         } else {
-                                                                            // throw new Error("Data size mismatch of data");
                                                                             throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_SIZE,
-                                                                                newPointer.id, "Data size mismatch");
+                                                                                newPointer.id, "Data size " + bufferData.length + " exceeds data block limit " + 
+                                                                                this.RelaySettings.storage.dataBlockLimit);
                                                                         }
                                                                     } else {
-                                                                        throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_SIZE,
-                                                                            newPointer.id, "Data size " + bufferData.length + " exceeds data block limit " + 
-                                                                            this.RelaySettings.storage.dataBlockLimit);
+                                                                        // throw new Error("Hash mismatch of data and pointerhash");
+                                                                        throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_DATA_HASH,
+                                                                            newPointer.id, "Hash mismatch of data and pointerhash");
                                                                     }
                                                                 } else {
-                                                                    // throw new Error("Hash mismatch of data and pointerhash");
-                                                                    throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_DATA_HASH,
-                                                                        newPointer.id, "Hash mismatch of data and pointerhash");
+                                                                    // throw new Error("Invalid data encoding");
+                                                                    throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_VALUES, 
+                                                                        newPointer.id, "Invalid data encoding, expecting base64");
                                                                 }
-                                                            } else {
-                                                                // throw new Error("Invalid data encoding");
-                                                                throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_VALUES, 
-                                                                    newPointer.id, "Invalid data encoding, expecting base64");
                                                             }
+                                                        } else if (results && results.length > 0){
+                                                            // Replacement Pointer
+                                                            let oldPointerId = results[0].id;
+                                                            this.replacePointer(oldPointerId, newPointer, (err, confirmId) => {
+                                                                if (!err) {
+                                                                    callback(undefined, newPointer.id, newPointer.pointerhash);
+                                                                } else {
+                                                                    callback(err, undefined, undefined); 
+                                                                }
+                                                            });
+                                                        } else {
+                                                            // throw new Error("Error retrieving pointers");
+                                                            throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ERROR_RETRIVING_POINTERS,
+                                                                newPointer ? newPointer.id : "", "");
+    
                                                         }
-                                                    } else if (results && results.length > 0){
-                                                        // Replacement Pointer
-                                                        let oldPointerId = results[0].id;
-                                                        this.replacePointer(oldPointerId, newPointer, (err, confirmId) => {
-                                                            if (!err) {
-                                                                callback(undefined, newPointer.id, newPointer.pointerhash);
-                                                            } else {
-                                                                callback(err, undefined, undefined); 
-                                                            }
-                                                        });
                                                     } else {
-                                                        // throw new Error("Error retrieving pointers");
-                                                        throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ERROR_RETRIVING_POINTERS,
-                                                            newPointer ? newPointer.id : "", "");
-
+                                                        throw err;
                                                     }
-                                                } else {
-                                                    throw err;
+                                                } catch (e) {
+                                                    console.error(e);
+                                                    callback(e, undefined, undefined);
                                                 }
-                                            } catch (e) {
-                                                console.error(e);
-                                                callback(e, undefined, undefined);
-                                            }
-                                        });
-                                    } else { // Do nothing, inform client
-                                        // throw new Error ("Pointer already exists, ignoring");
-                                        throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.NOTICE, 
-                                            newPointer ? newPointer.id : "", "Duplicate pointer, ignoring");
+                                            });
+                                        } else { // Do nothing, inform client
+                                            // throw new Error ("Pointer already exists, ignoring");
+                                            throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.NOTICE, 
+                                                newPointer ? newPointer.id : "", "Duplicate pointer, ignoring");
+                                        }
+                                    } else {
+                                        // throw err;
+                                        throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ERROR_RETRIVING_POINTERS, 
+                                            newPointer ? newPointer.id : "", "");
                                     }
-                                } else {
-                                    // throw err;
-                                    throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ERROR_RETRIVING_POINTERS, 
-                                        newPointer ? newPointer.id : "", "");
+                                } catch (e) {
+                                    // console.error(e);
+                                    callback(e, undefined, undefined);
                                 }
-                            } catch (e) {
-                                // console.error(e);
-                                callback(e, undefined, undefined);
-                            }
-                        });
-                    } else {
-                        // throw new Error("invalid timestamp");
-                        throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER, 
-                            newPointer ? newPointer.id : "", "Pointer timestamp is not within threshold");
+                            });
+                        } else {
+                            // throw new Error("invalid timestamp");
+                            throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER, 
+                                newPointer ? newPointer.id : "", "Pointer timestamp is not within threshold");
+                        }
+                    } else if (filterActionPublish.action == StorageNodeFilter.POINTER_PUBLISH_DENY) {
+                        throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ACTION_NOT_ALLOWED,
+                            newPointer ? newPointer.id : "", "Publish action denied");
+                    } else if (filterActionPublish.action == StorageNodeFilter.POINTER_SIZE_QUOTA) {
+                        throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ACTION_NOT_ALLOWED,
+                            newPointer ? newPointer.id : "", "Size quota exceeded");
+                    } else if (filterActionPublish.action == StorageNodeFilter.POINTER_COUNT_QUOTA) {
+                        throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ACTION_NOT_ALLOWED,
+                            newPointer ? newPointer.id : "", "Pointer count quota exceeded");
                     }
                     
                 } else {
@@ -315,7 +330,7 @@ module.exports = class PointerStorageManagement {
                     newPointer ? newPointer.id : "", "Pointer object malformed");
             }
         } catch (e) {
-            console.error(e);
+            // console.error(e);
             callback(e, undefined, undefined);
         }
     } // Publish Pointer
