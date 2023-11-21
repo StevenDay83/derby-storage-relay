@@ -28,7 +28,7 @@ module.exports = class PointerStorageManagement {
         this.PubKeyFilter.loadFilterKeys();
 
         this.PubKeyFilter.checkForChanges(true);
-        console.log(this.PubKeyFilter);
+        // console.log(this.PubKeyFilter);
     }
 
     rehashPointerIndexer(callback) {
@@ -49,7 +49,7 @@ module.exports = class PointerStorageManagement {
                                 pointerHashSum:thisPubKeyPointerSum
                             };
                         });
-                        console.log(JSON.stringify(this.pointerIndex, undefined, 4));
+                        // console.log(JSON.stringify(this.pointerIndex, undefined, 4));
                     }
                     callback(undefined);
                 } else {
@@ -80,28 +80,32 @@ module.exports = class PointerStorageManagement {
 
     initializeDatabase(callback){
         try {
-            this.DBpool = mariaDB.createConnection({
-                host:this.RelaySettings.database.host,
-                port:this.RelaySettings.database.port,
-                user:this.RelaySettings.database.username,
-                password:this.RelaySettings.database.password,
-                database:this.RelaySettings.database.pointerDatabase,
-                idleTimeout:0,
-                minDelayValidation:0
-            }).then(conn => {
-                this.DBConnection = conn;
-                this.DBConnection.end();
-                callback(undefined);
-            }).catch(err => {
-                callback(err);
-            }).finally(() => {
-                if (this.DBConnection){
-                    this.DBConnection.end();
+            // Create the database if it doesn't exist. 
+
+            let createTable = "CREATE TABLE if not exists `Pointers`  ("+
+            "  `id` varchar(64) DEFAULT NULL COMMENT 'Pointer ID',"+
+            "  `pubkey` varchar(64) DEFAULT NULL COMMENT 'Pointer Public Key',"+
+            "  `timestamp` int(10) unsigned DEFAULT NULL COMMENT 'Unix Time in Seconds',"+
+            "  `pointerhash` varchar(64) DEFAULT NULL COMMENT 'Hash to Pointed Data',"+
+            "  `size` int(10) unsigned DEFAULT NULL COMMENT 'Size of pointed data',"+
+            "  `nonce` int(10) unsigned DEFAULT NULL COMMENT 'Nonce data',"+
+            "  `signature` varchar(128) DEFAULT NULL COMMENT 'Schnorr signature'"+
+            ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci";
+    
+              this.executePointerQuery(createTable, undefined, (err, queryResponse) => {
+                if (!err){
+                    // console.log(queryResponse.warningStatus);
+                    callback(undefined, queryResponse.warningStatus);
+                } else {
+                    throw err;
+                    // callback(err);
                 }
-            });
+              });
+
         } catch (e) {
             callback(e);
         }
+
     }
 
     executePointerQuery(sqlQueryString, SQLValues = undefined, callback) {
@@ -150,7 +154,7 @@ module.exports = class PointerStorageManagement {
 
                     let filterActionPublish = this.PubKeyFilter.filterPointerByAction(newPointer, "publish");
 
-                    console.log("Publish filter: " + JSON.stringify(filterActionPublish)); // Debug for filter
+                    // console.log("Publish filter: " + JSON.stringify(filterActionPublish)); // Debug for filter
 
                     if (filterActionPublish.action == StorageNodeFilter.POINTER_ACCEPTED){
                         // Check time delta
@@ -614,7 +618,7 @@ module.exports = class PointerStorageManagement {
                 // TODO: Fix Limit 0 issue
                 if (!(criteriaLabels.length == 1 && criteriaStrings["limit"] != undefined) &&
                 criteriaLabels.length > 0){
-                    console.log("Good to go");
+                    // console.log("Good to go");
                     queryString += " WHERE ";
                     for (let i = 0; i < criteriaLabels.length; i++){
                         let thisLabel = criteriaLabels[i];
@@ -639,7 +643,7 @@ module.exports = class PointerStorageManagement {
                 // else {
                 //     queryString += " limit " + 1000;
                 // }
-                console.log(queryString);
+                // console.log(queryString);
                 // OLD
                 // this.DBConnection.query(queryString).then((rows) => {
                 //     // console.log(rows);

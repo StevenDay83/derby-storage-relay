@@ -74,25 +74,35 @@ let testSearch = {ids:["12345"],owners:["6789"],olderthan:1697420666,pointerhash
 
 
 Logger.WriteInfoLog("Initializing connection to database at " + GlobalSettings.database.host + (GlobalSettings.database.port ? ':' + GlobalSettings.database.port : ""));
-pointerMgr.rehashPointerIndexer(err => {
-    if (err){
-        console.error(err);
-    } else {
-        // console.log("Database Initialized!")
-        Logger.WriteInfoLog("Initialized connection to database " + GlobalSettings.database.pointerDatabase);
-
-        let thisRelayServer = new RelayServer(GlobalSettings.server, pointerMgr);
-        Logger.WriteInfoLog("Starting Server at host " + GlobalSettings.server.host + 
-        (GlobalSettings.server.port ? ':' + GlobalSettings.server.port : ""));
-        thisRelayServer.startServer(err => {
-            if (!err){
-                // console.log("Server started");
-                Logger.WriteInfoLog("Server started, listening for connections");
+pointerMgr.initializeDatabase((err, newTable) => {
+    if (!err){
+        Logger.WriteInfoLog("Connection to database " + GlobalSettings.database.pointerDatabase + ": OK");
+        if (newTable){
+            Logger.WriteInfoLog("Database table for pointers present");
+        } else {
+            Logger.WriteInfoLog("Database table for pointers created");
+        }
+        pointerMgr.rehashPointerIndexer(err => {
+            if (err){
+                console.error(err);
             } else {
-                // console.log(err);
-                Logger.WriteErrorLog("Error starting server: " + err.message);
+        
+                let thisRelayServer = new RelayServer(GlobalSettings.server, pointerMgr);
+                Logger.WriteInfoLog("Starting Server at host " + GlobalSettings.server.host + 
+                (GlobalSettings.server.port ? ':' + GlobalSettings.server.port : ""));
+                thisRelayServer.startServer(err => {
+                    if (!err){
+                        // console.log("Server started");
+                        Logger.WriteInfoLog("Server started, listening for connections");
+                    } else {
+                        // console.log(err);
+                        Logger.WriteErrorLog("Error starting server: " + err.message);
+                    }
+                });
             }
         });
+    } else {
+        console.error(err);
     }
 });
 
