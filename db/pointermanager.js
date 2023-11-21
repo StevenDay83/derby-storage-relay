@@ -27,6 +27,7 @@ module.exports = class PointerStorageManagement {
         this.PubKeyFilter.loadFilterGroups();
         this.PubKeyFilter.loadFilterKeys();
 
+        this.PubKeyFilter.checkForChanges(true);
         console.log(this.PubKeyFilter);
     }
 
@@ -310,13 +311,13 @@ module.exports = class PointerStorageManagement {
                         }
                     } else if (filterActionPublish.action == StorageNodeFilter.POINTER_PUBLISH_DENY) {
                         throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ACTION_NOT_ALLOWED,
-                            newPointer ? newPointer.id : "", "Publish action denied");
+                            newPointer ? newPointer.id : "", ErrorManager.DEFAULT_ACTION_ERRORS.PUBLISH_ACTION_DENIED);
                     } else if (filterActionPublish.action == StorageNodeFilter.POINTER_SIZE_QUOTA) {
                         throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ACTION_NOT_ALLOWED,
-                            newPointer ? newPointer.id : "", "Size quota exceeded");
+                            newPointer ? newPointer.id : "", ErrorManager.DEFAULT_ACTION_ERRORS.QUOTA_EXCEEDED_SIZE);
                     } else if (filterActionPublish.action == StorageNodeFilter.POINTER_COUNT_QUOTA) {
                         throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ACTION_NOT_ALLOWED,
-                            newPointer ? newPointer.id : "", "Pointer count quota exceeded");
+                            newPointer ? newPointer.id : "", ErrorManager.DEFAULT_ACTION_ERRORS.QUOTA_EXCEEDED_POINTER_COUNT);
                     }
                     
                 } else {
@@ -342,37 +343,48 @@ module.exports = class PointerStorageManagement {
         let deleteSQLString = 'DELETE FROM Pointers WHERE id in (?)';
         try {
             if (oldPointerId && newPointerObject && newPointerObject.id){
-                // Should I check if the blob exists?
-
-                let SQLValues = [
-                    newPointerObject.id,
-                    newPointerObject.pubkey,
-                    newPointerObject.timestamp,
-                    newPointerObject.pointerhash,
-                    newPointerObject.size,
-                    newPointerObject.nonce,
-                    newPointerObject.signature
-                ];
-
-                this.executePointerQuery(insertSQLString +
-                    ' VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    SQLValues, (err, response) => {
-                        if (!err) {
-                            if (response && response.affectedRows > 0) {
-                                this.executePointerQuery(deleteSQLString, oldPointerId, (err2, response2) => {
-                                    if (!err2) {
-                                        if (response2 && response2.affectedRows > 0) {
-                                            callback(undefined, newPointerObject.id);
-                                        }
-                                    } else {
-                                        throw err2;
+                if (pointertools.verifySignature(newPointerObject)) {
+                    // Should I check if the blob exists?
+                    let filterActionReplace = this.PubKeyFilter.filterPointerByAction(newPointerObject, "replace");
+                    
+                    if (filterActionReplace.action == StorageNodeFilter.POINTER_ACCEPTED){
+                        let SQLValues = [
+                            newPointerObject.id,
+                            newPointerObject.pubkey,
+                            newPointerObject.timestamp,
+                            newPointerObject.pointerhash,
+                            newPointerObject.size,
+                            newPointerObject.nonce,
+                            newPointerObject.signature
+                        ];
+        
+                        this.executePointerQuery(insertSQLString +
+                            ' VALUES (?, ?, ?, ?, ?, ?, ?)',
+                            SQLValues, (err, response) => {
+                                if (!err) {
+                                    if (response && response.affectedRows > 0) {
+                                        this.executePointerQuery(deleteSQLString, oldPointerId, (err2, response2) => {
+                                            if (!err2) {
+                                                if (response2 && response2.affectedRows > 0) {
+                                                    callback(undefined, newPointerObject.id);
+                                                }
+                                            } else {
+                                                throw err2;
+                                            }
+                                        });
                                     }
-                                });
-                            }
-                        } else {
-                            throw err;
-                        }
-                    });
+                                } else {
+                                    throw err;
+                                }
+                            });
+                    } else {
+                        throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ACTION_NOT_ALLOWED,
+                            newPointerObject ? newPointerObject.id : "", ErrorManager.DEFAULT_ACTION_ERRORS.REPLACE_ACTION_DENIED);
+                    }
+                } else {
+                    throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER, 
+                        newPointerObject ? newPointerObject.id : "", "Pointer verification failed");
+                }
             } else {
                 // throw new Error("Pointer reference error");
                 throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER, 
@@ -380,7 +392,7 @@ module.exports = class PointerStorageManagement {
             }
         } catch (e) {
             console.error(e);
-            callback(err, undefined);
+            callback(e, undefined);
         }
 
     }
@@ -394,42 +406,48 @@ module.exports = class PointerStorageManagement {
 
         try {
             if (deletionValidationPointer && pointertools.verifySignature(deletionValidationPointer)){
-                let dateNow = Math.floor(Date.now() / 1000);
-                let publicKey = deletionValidationPointer.pubkey;
-                let pointerHash = deletionValidationPointer.pointerhash;
+                let filterActionDelete = this.PubKeyFilter.filterPointerByAction(deletionValidationPointer,"delete");
 
-                this.getPointerByPKPH(publicKey, pointerHash, (err, result) => {
-                    try {
-                        if (result){
-                            let pointerResult = this._formatSQLResultsIntoPointers([result])[0];
-                            let pointerResultTimeStamp = pointerResult.timestamp;
-
-                            if (pointerResultTimeStamp < deletionValidationPointer.timestamp 
-                                && pointerResult.nonce != deletionValidationPointer.nonce){
-                                this._removePointerInternal(pointerResult, (err, deletedPointerId) => {
-                                    if (!err) {
-                                        this.updateIndexer(pointerResult.pubkey, -1, -pointerResult.size);
-                                        callback(undefined, deletedPointerId);
-                                    } else {
-                                        callback(err, undefined);
-                                    }
-                                });
+                if (filterActionDelete.action == StorageNodeFilter.POINTER_ACCEPTED){
+                    let dateNow = Math.floor(Date.now() / 1000);
+                    let publicKey = deletionValidationPointer.pubkey;
+                    let pointerHash = deletionValidationPointer.pointerhash;
+    
+                    this.getPointerByPKPH(publicKey, pointerHash, (err, result) => {
+                        try {
+                            if (result){
+                                let pointerResult = this._formatSQLResultsIntoPointers([result])[0];
+                                let pointerResultTimeStamp = pointerResult.timestamp;
+    
+                                if (pointerResultTimeStamp < deletionValidationPointer.timestamp 
+                                    && pointerResult.nonce != deletionValidationPointer.nonce){
+                                    this._removePointerInternal(pointerResult, (err, deletedPointerId) => {
+                                        if (!err) {
+                                            this.updateIndexer(pointerResult.pubkey, -1, -pointerResult.size);
+                                            callback(undefined, deletedPointerId);
+                                        } else {
+                                            callback(err, undefined);
+                                        }
+                                    });
+                                } else {
+                                    // throw new Error("Invalid deletion pointer");
+                                    throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_DELETION_POINTER,
+                                        deletionValidationPointer ? deletionValidationPointer.id : "", 
+                                        "Invalid deletion pointer. Timestamp or Nonce value failed check");
+                                }
                             } else {
-                                // throw new Error("Invalid deletion pointer");
-                                throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_DELETION_POINTER,
-                                    deletionValidationPointer ? deletionValidationPointer.id : "", 
-                                    "Invalid deletion pointer. Timestamp or Nonce value failed check");
+                                throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER, 
+                                    deletionValidationPointer ? deletionValidationPointer.id : "",
+                                    "Pointer does not exist");
                             }
-                        } else {
-                            throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER, 
-                                deletionValidationPointer ? deletionValidationPointer.id : "",
-                                "Pointer does not exist");
+                        } catch (e) {
+                            callback(e, undefined);
                         }
-                    } catch (e) {
-                        callback(e, undefined);
-                    }
-                });
-                
+                    });
+                } else {
+                    throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ACTION_NOT_ALLOWED,
+                        newPointerObject ? newPointerObject.id : "", ErrorManager.DEFAULT_ACTION_ERRORS.DELETE_ACTION_DENIED);
+                }
             } else {
                 // throw new Error ("Invalid pointer");
                 throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER,

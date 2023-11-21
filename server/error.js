@@ -30,6 +30,15 @@ const ERROR_MESSAGES = {
     0x0c: "Notice: "
 };
 
+
+const DEFAULT_ACTION_ERRORS = {
+    QUOTA_EXCEEDED_SIZE:"Size quota exceeded",
+    QUOTA_EXCEEDED_POINTER_COUNT:"Pointer count quota exceeded",
+    PUBLISH_ACTION_DENIED:"Pointer publish action denied",
+    REPLACE_ACTION_DENIED:"Pointer replacement action denied",
+    DELETE_ACTION_DENIED:"Pointer deletion action denied"
+};
+
 function getProtocolError(errorCode, contextId = "", contextMessage = "") {
     let newError;
 
@@ -71,4 +80,5 @@ function createErrorResponseMessage(errorObject) {
 module.exports.ERROR_CODES = ERROR_CODES;
 module.exports.ERROR_MESSAGES = ERROR_MESSAGES;
 module.exports.getProtocolError = getProtocolError;
+module.exports.DEFAULT_ACTION_ERRORS = DEFAULT_ACTION_ERRORS;
 module.exports.createErrorResponseMessage = createErrorResponseMessage;

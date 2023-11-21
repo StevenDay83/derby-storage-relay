@@ -33,6 +33,7 @@ const DEFAULT_FILTER_GROUP = {
 };
 
 const fs = require('fs');
+const Logger = require('../logging/log');
 
 class KeysFilterManager {
     constructor(GlobalSettings, pointerIndexer){
@@ -41,6 +42,7 @@ class KeysFilterManager {
         this.FilterGroup = DEFAULT_FILTER_GROUP;
         this.PublicKeysFilter;
         this.PointerIndexer = pointerIndexer;
+        this.checkForChangesInterval;
     }
 
     loadFilterGroups(){
@@ -95,6 +97,21 @@ class KeysFilterManager {
         }
 
         return success;
+    }
+
+    checkForChanges(enabled) {
+        if (enabled){
+            this.checkForChangesInterval = setInterval(() => {
+                try {
+                    this.loadFilterGroups();
+                    this.loadFilterKeys();
+                } catch (e) {
+                    // If error on loading filters and filter pubkeys do nothing and keep previous in memory
+                }
+            }, 30000);
+        } else if (!enabled && this.checkForChangesInterval) {
+            clearTimeout(this.checkForChangesInterval);
+        }
     }
 
     getFilterGroupByPubkey(publicKey) {
