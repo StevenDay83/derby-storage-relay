@@ -10,16 +10,17 @@
         "dataBlockLimit": 512000
    },
    "pointer":{
-        "timestampDelta":0
+        "timestampDelta":300
    },
    "database":{
     "host":"localhost",
     "port":3306,
     "username":"username",
-    "password":"username",
+    "password":"password",
     "pointerDatabase":"pointer_db"
    },
    "filter":{
-     "filterfile":"./filter.json"
+     "filtergroupfile":"./filter.json",
+     "filterkeysfile":"./filter_keys.json"
    }
 }

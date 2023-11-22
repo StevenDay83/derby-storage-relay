@@ -169,7 +169,7 @@ module.exports = class StorageRelayServer {
                                                 base64Data
                                             ];
                                             
-                                            console.log("Sending Binary Data");
+                                            // console.log("Sending Binary Data");
                                             socket.send(JSON.stringify(responseJSON));
                                         }
                                     } else {

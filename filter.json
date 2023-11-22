@@ -7,14 +7,16 @@
             "pointerexpiration":0,
             "maximumpointers":0,
             "maximumpointerhashsize":0
-        }
+        },
+        "label":"Root Level"
     },
     "block":{
         "settings":{
             "canpublish":false,
             "canreplace":false,
             "candelete":false
-        }
+        },
+        "label":"Blocked keys"
     },
     "registered":{
         "settings":{
@@ -24,7 +26,19 @@
             "pointerexpiration":7884000,
             "maximumpointers":1000,
             "maximumpointerhashsize":1000000000
-        }
+        },
+        "label":"registered"
+    },
+    "restricted":{
+        "settings":{
+            "canpublish":true,
+            "canreplace":false,
+            "candelete":true,
+            "pointerexpiration":7884000,
+            "maximumpointers":0,
+            "maximumpointerhashsize":0
+        },
+        "label":"restricted test"
     },
     "default":{
         "settings":{
@@ -34,6 +48,7 @@
             "pointerexpiration":7884000,
             "maximumpointers":1000,
             "maximumpointerhashsize":50000000
-        }
+        },
+        "label":"default"
     }
 }
