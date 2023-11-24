@@ -424,7 +424,9 @@ module.exports = class PointerStorageManagement {
                                 let pointerResultTimeStamp = pointerResult.timestamp;
     
                                 if (pointerResultTimeStamp < deletionValidationPointer.timestamp 
-                                    && pointerResult.nonce != deletionValidationPointer.nonce){
+                                    && pointerResult.nonce != deletionValidationPointer.nonce  && 
+                                    Math.abs(dateNow - deletionValidationPointer.timestamp) <= 300 &&
+                                    deletionValidationPointer.nonce < 9 && deletionValidationPointer.nonce >= 0){
                                     this._removePointerInternal(pointerResult, (err, deletedPointerId) => {
                                         if (!err) {
                                             this.updateIndexer(pointerResult.pubkey, -1, -pointerResult.size);
