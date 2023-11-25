@@ -314,7 +314,7 @@ module.exports = class PointerStorageManagement {
                                 newPointer ? newPointer.id : "", "Pointer timestamp is not within threshold");
                         }
                     } else if (filterActionPublish.action == StorageNodeFilter.POINTER_PUBLISH_DENY) {
-                        throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ACTION_NOT_ALLOWED,
+                        throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_PUBKEY,
                             newPointer ? newPointer.id : "", ErrorManager.DEFAULT_ACTION_ERRORS.PUBLISH_ACTION_DENIED);
                     } else if (filterActionPublish.action == StorageNodeFilter.POINTER_SIZE_QUOTA) {
                         throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ACTION_NOT_ALLOWED,
@@ -382,7 +382,7 @@ module.exports = class PointerStorageManagement {
                                 }
                             });
                     } else {
-                        throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ACTION_NOT_ALLOWED,
+                        throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_PUBKEY,
                             newPointerObject ? newPointerObject.id : "", ErrorManager.DEFAULT_ACTION_ERRORS.REPLACE_ACTION_DENIED);
                     }
                 } else {
@@ -451,7 +451,7 @@ module.exports = class PointerStorageManagement {
                         }
                     });
                 } else {
-                    throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ACTION_NOT_ALLOWED,
+                    throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_PUBKEY,
                         newPointerObject ? newPointerObject.id : "", ErrorManager.DEFAULT_ACTION_ERRORS.DELETE_ACTION_DENIED);
                 }
             } else {
