@@ -3,21 +3,22 @@ const binarytools = require('../pointer/blob.js');
 const pointertools = require('../pointer/pointer.js');
 const ErrorManager = require('../server/error.js');
 const sha256 = require('sha256');
-const mariaDB = require('mariadb');
+const mariaDB = require('mariadb/callback');
 const StorageNodeFilter = require('./filter.js');
 
 module.exports = class PointerStorageManagement {
-    constructor(relaySettings, dataStorageManager){
+    constructor(relaySettings, dataStorageManager) {
         this.RelaySettings = relaySettings;
         this.DataStorageManager = dataStorageManager;
         this.DBpool;
         this.DBConnection;
         this.SQLConnectionInformation = {
-            host:this.RelaySettings.database.host,
-            port:this.RelaySettings.database.port,
-            user:this.RelaySettings.database.username,
-            password:this.RelaySettings.database.password,
-            database:this.RelaySettings.database.pointerDatabase
+            host: this.RelaySettings.database.host,
+            port: this.RelaySettings.database.port,
+            user: this.RelaySettings.database.username,
+            password: this.RelaySettings.database.password,
+            database: this.RelaySettings.database.pointerDatabase,
+            connectionLimit:100
         };
         this.pointerIndex = {
         };
@@ -35,9 +36,9 @@ module.exports = class PointerStorageManagement {
         try {
             let uniquePublicKeyQuery = 'SELECT pubkey, count(id) as "count", sum(size) as "totalsize" from Pointers group by pubkey';
 
-            this.executePointerQuery(uniquePublicKeyQuery,undefined, (err, rows) => {
-                if (!err){
-                    if (rows && rows.length > 0){
+            this.executePointerQuery(uniquePublicKeyQuery, undefined, (err, rows) => {
+                if (!err) {
+                    if (rows && rows.length > 0) {
 
                         rows.forEach(uniqueKeyRow => {
                             let thisKey = uniqueKeyRow["pubkey"];
@@ -45,8 +46,8 @@ module.exports = class PointerStorageManagement {
                             let thisPubKeyPointerSum = uniqueKeyRow["totalsize"];
 
                             this.pointerIndex[thisKey] = {
-                                pointerCount:thisPubkeyPointerCount,
-                                pointerHashSum:thisPubKeyPointerSum
+                                pointerCount: thisPubkeyPointerCount,
+                                pointerHashSum: thisPubKeyPointerSum
                             };
                         });
                         // console.log(JSON.stringify(this.pointerIndex, undefined, 4));
@@ -56,51 +57,53 @@ module.exports = class PointerStorageManagement {
                     throw err;
                 }
             });
-        } catch(e) {
+        } catch (e) {
             callback(e);
         }
     }
 
     updateIndexer(key, addCount, addSize) {
         if (this.pointerIndex[key]) {
-            this.pointerIndex[key].pointerCount += addCount != undefined? addCount : 0;
+            this.pointerIndex[key].pointerCount += addCount != undefined ? addCount : 0;
             this.pointerIndex[key].pointerHashSum += addSize != undefined ? addSize : 0;
 
-            if (this.pointerIndex[key].pointerCount == 0){
+            if (this.pointerIndex[key].pointerCount == 0) {
                 delete this.pointerIndex[key];
             }
         } else {
             // New unique key
             this.pointerIndex[key] = {
-                pointerCount:addCount != undefined ? addCount : 0,
-                pointerHashSum:addSize != undefined ? addSize : 0
+                pointerCount: addCount != undefined ? addCount : 0,
+                pointerHashSum: addSize != undefined ? addSize : 0
             }
         }
     }
 
-    initializeDatabase(callback){
+    initializeDatabase(callback) {
         try {
+            this.DBpool = mariaDB.createPool(this.SQLConnectionInformation);
+
             // Create the database if it doesn't exist. 
 
-            let createTable = "CREATE TABLE if not exists `Pointers`  ("+
-            "  `id` varchar(64) DEFAULT NULL COMMENT 'Pointer ID',"+
-            "  `pubkey` varchar(64) DEFAULT NULL COMMENT 'Pointer Public Key',"+
-            "  `timestamp` int(10) unsigned DEFAULT NULL COMMENT 'Unix Time in Seconds',"+
-            "  `pointerhash` varchar(64) DEFAULT NULL COMMENT 'Hash to Pointed Data',"+
-            "  `size` int(10) unsigned DEFAULT NULL COMMENT 'Size of pointed data',"+
-            "  `nonce` int(10) unsigned DEFAULT NULL COMMENT 'Nonce data',"+
-            "  `signature` varchar(128) DEFAULT NULL COMMENT 'Schnorr signature'"+
-            ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci";
-    
-              this.executePointerQuery(createTable, undefined, (err, queryResponse) => {
-                if (!err){
+            let createTable = "CREATE TABLE if not exists `Pointers`  (" +
+                "  `id` varchar(64) DEFAULT NULL COMMENT 'Pointer ID'," +
+                "  `pubkey` varchar(64) DEFAULT NULL COMMENT 'Pointer Public Key'," +
+                "  `timestamp` int(10) unsigned DEFAULT NULL COMMENT 'Unix Time in Seconds'," +
+                "  `pointerhash` varchar(64) DEFAULT NULL COMMENT 'Hash to Pointed Data'," +
+                "  `size` int(10) unsigned DEFAULT NULL COMMENT 'Size of pointed data'," +
+                "  `nonce` int(10) unsigned DEFAULT NULL COMMENT 'Nonce data'," +
+                "  `signature` varchar(128) DEFAULT NULL COMMENT 'Schnorr signature'" +
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci";
+
+            this.executePointerQuery(createTable, undefined, (err, queryResponse) => {
+                if (!err) {
                     // console.log(queryResponse.warningStatus);
                     callback(undefined, queryResponse.warningStatus);
                 } else {
                     throw err;
                     // callback(err);
                 }
-              });
+            });
 
         } catch (e) {
             callback(e);
@@ -109,27 +112,23 @@ module.exports = class PointerStorageManagement {
     }
 
     executePointerQuery(sqlQueryString, SQLValues = undefined, callback) {
-        let newSQLConnection = mariaDB.createConnection(this.SQLConnectionInformation).then(
-            newConnection => {
-                newConnection.query(sqlQueryString, SQLValues).then(
-                    queryResponse => {
-                        if (queryResponse){
-                            newConnection.end();
-                            callback(undefined, queryResponse);
-                        } else {
-                            newConnection.end();
-                            callback(new Error("Query response error")); // Make this clearer
-                        }
+        this.DBpool.getConnection((err, newConnection) => {
+        if (!err) {
+            newConnection.query(sqlQueryString, SQLValues, (err, queryResponse) => {
+                newConnection.end();
+                if (!err) {
+                    if (queryResponse){
+                        callback(undefined, queryResponse);
+                    } else {
+                        callback(new Error("Query response error")); // Make this clearer
                     }
-                ).catch(err => {
-                    throw err;
-                }).finally(() => {
-                    newConnection.end();
-                });
-            }
-        ).catch(err => {
-            // callback(err);
-            throw err;
+                } else {
+                    callback(err);
+                }
+            });
+        } else {
+            callback(err);
+        }
         });
     }
 
@@ -146,8 +145,8 @@ module.exports = class PointerStorageManagement {
         // Send to callback
         let insertSQLString = 'INSERT INTO Pointers (id, pubkey, `timestamp`, pointerhash, `size`, nonce, signature)';
         try {
-            if (newPointer){
-                if (pointertools.verifySignature(newPointer)){ // Verify pointer hash and sig
+            if (newPointer) {
+                if (pointertools.verifySignature(newPointer)) { // Verify pointer hash and sig
                     let timeStamp = newPointer.timestamp;
                     let timeNow = Math.floor(Date.now() / 1000);
                     let timeDelta = Math.abs(timeStamp - timeNow);
@@ -156,43 +155,43 @@ module.exports = class PointerStorageManagement {
 
                     // console.log("Publish filter: " + JSON.stringify(filterActionPublish)); // Debug for filter
 
-                    if (filterActionPublish.action == StorageNodeFilter.POINTER_ACCEPTED){
+                    if (filterActionPublish.action == StorageNodeFilter.POINTER_ACCEPTED) {
                         // Check time delta
                         // If time delta is 0, any time is permissible
                         // TODO: May want to prevent future dates no matter what
-                        if ((this.RelaySettings.pointer.timestampDelta == 0 ? true : false) || timeDelta <= this.RelaySettings.pointer.timestampDelta){
+                        if ((this.RelaySettings.pointer.timestampDelta == 0 ? true : false) || timeDelta <= this.RelaySettings.pointer.timestampDelta) {
                             let newPointerId = newPointer.id;
-    
+
                             this.getPointerById(newPointerId, (err, result) => { // Check for existing duplicate ID
                                 try {
-                                    if (!err){
-                                        if (!result){
+                                    if (!err) {
+                                        if (!result) {
                                             // Check if this is a replacement by looking at
                                             // PointerHash and Pubkey
                                             // If there is an existing PointerHash and PubKey, treat as a replacement
                                             let pointerSearchCriteria = {
-                                                owners:[newPointer.pubkey],
-                                                pointerhashes:[newPointer.pointerhash]
+                                                owners: [newPointer.pubkey],
+                                                pointerhashes: [newPointer.pointerhash]
                                             };
-    
+
                                             this.getPointerByCriteria(pointerSearchCriteria, (err, results) => {
                                                 try {
                                                     if (!err) {
                                                         if (results && results.length == 0) { // No existing pubkey claim on data
                                                             // New Pointer
-                                                            if (blob && blob.length > 0){
-                                                                if (binarytools.isBase64Data(blob)){
+                                                            if (blob && blob.length > 0) {
+                                                                if (binarytools.isBase64Data(blob)) {
                                                                     // Verify converted binary matches pointerhash
                                                                     let bufferData = binarytools.getBufferData(blob);
                                                                     let bufferDataHash = binarytools.getDataHash(bufferData);
-    
-                                                                    if (bufferDataHash == newPointer.pointerhash){
-                                                                        if (bufferData.length <= this.RelaySettings.storage.dataBlockLimit){
-                                                                            if (bufferData.length == newPointer.size){
+
+                                                                    if (bufferDataHash == newPointer.pointerhash) {
+                                                                        if (bufferData.length <= this.RelaySettings.storage.dataBlockLimit) {
+                                                                            if (bufferData.length == newPointer.size) {
                                                                                 // Write data to disk
                                                                                 this.DataStorageManager.publishData(bufferData, (err, dataHash) => {
                                                                                     try {
-                                                                                        if (!err){
+                                                                                        if (!err) {
                                                                                             // Write pointer to Database
                                                                                             let SQLValues = [
                                                                                                 newPointer.id,
@@ -203,45 +202,26 @@ module.exports = class PointerStorageManagement {
                                                                                                 newPointer.nonce,
                                                                                                 newPointer.signature
                                                                                             ];
-                                                                                            let useOld = false;
-    
-                                                                                            if (useOld){
-                                                                                                // A Rock
-                                                                                                this.DBConnection.query(insertSQLString +
-                                                                                                    ' VALUES (?, ?, ?, ?, ?, ?, ?)',
-                                                                                                    SQLValues).then((res) => {
-                                                                                                        if (res && res.affectedRows == 1){
-                                                                                                                this.updateIndexer(newPointer.pubkey, 1, newPointer.size);
-                                                                                                                callback(undefined, newPointer.id, newPointer.pointerhash);
-                                                                                                            } else {
-                                                                                                               callback(new Error("SQL Error"), undefined, undefined); 
-                                                                                                            }
-                                                                                                    }).catch(err => {
-                                                                                                        let criticalSQLError = ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.NOTICE,
-                                                                                                            newPointer ? newPointer.id : "", "Critcal error publishing pointer");
-                                                                                                        callback(criticalSQLError, undefined, undefined); 
-                                                                                                    });
-                                                                                                // A hard place
-                                                                                            } else {
-                                                                                                this.executePointerQuery(insertSQLString +
-                                                                                                    ' VALUES (?, ?, ?, ?, ?, ?, ?)', SQLValues, (err, response) => {
-                                                                                                        if (!err) {
-                                                                                                            if (response && response.affectedRows == 1){
-                                                                                                                this.updateIndexer(newPointer.pubkey, 1, newPointer.size);
-                                                                                                                callback(undefined, newPointer.id, newPointer.pointerhash);
-                                                                                                            } else {
-                                                                                                               callback(new Error("SQL Error"), undefined, undefined); 
-                                                                                                            }
+
+                                                                                            this.executePointerQuery(insertSQLString +
+                                                                                                ' VALUES (?, ?, ?, ?, ?, ?, ?)', SQLValues, (err, response) => {
+                                                                                                    if (!err) {
+                                                                                                        if (response && response.affectedRows == 1) {
+                                                                                                            this.updateIndexer(newPointer.pubkey, 1, newPointer.size);
+                                                                                                            callback(undefined, newPointer.id, newPointer.pointerhash);
                                                                                                         } else {
-                                                                                                            callback(new Error("SQL Error"), undefined, undefined); 
+                                                                                                            callback(new Error("SQL Error"), undefined, undefined);
                                                                                                         }
-                                                                                                    });
-                                                                                            }
-    
-    
+                                                                                                    } else {
+                                                                                                        callback(new Error("SQL Error"), undefined, undefined);
+                                                                                                    }
+                                                                                                });
+
+
+
                                                                                         } else {
                                                                                             throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.NOTICE,
-                                                                                                newPointer ? newPointer.id : "","Critical error saving data");
+                                                                                                newPointer ? newPointer.id : "", "Critical error saving data");
                                                                                         }
                                                                                     } catch (e) {
                                                                                         console.log(e);
@@ -255,8 +235,8 @@ module.exports = class PointerStorageManagement {
                                                                             }
                                                                         } else {
                                                                             throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_SIZE,
-                                                                                newPointer.id, "Data size " + bufferData.length + " exceeds data block limit " + 
-                                                                                this.RelaySettings.storage.dataBlockLimit);
+                                                                                newPointer.id, "Data size " + bufferData.length + " exceeds data block limit " +
+                                                                            this.RelaySettings.storage.dataBlockLimit);
                                                                         }
                                                                     } else {
                                                                         // throw new Error("Hash mismatch of data and pointerhash");
@@ -265,25 +245,25 @@ module.exports = class PointerStorageManagement {
                                                                     }
                                                                 } else {
                                                                     // throw new Error("Invalid data encoding");
-                                                                    throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_VALUES, 
+                                                                    throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_VALUES,
                                                                         newPointer.id, "Invalid data encoding, expecting base64");
                                                                 }
                                                             }
-                                                        } else if (results && results.length > 0){
+                                                        } else if (results && results.length > 0) {
                                                             // Replacement Pointer
                                                             let oldPointerId = results[0].id;
                                                             this.replacePointer(oldPointerId, newPointer, (err, confirmId) => {
                                                                 if (!err) {
                                                                     callback(undefined, newPointer.id, newPointer.pointerhash);
                                                                 } else {
-                                                                    callback(err, undefined, undefined); 
+                                                                    callback(err, undefined, undefined);
                                                                 }
                                                             });
                                                         } else {
                                                             // throw new Error("Error retrieving pointers");
                                                             throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ERROR_RETRIVING_POINTERS,
                                                                 newPointer ? newPointer.id : "", "");
-    
+
                                                         }
                                                     } else {
                                                         throw err;
@@ -295,12 +275,12 @@ module.exports = class PointerStorageManagement {
                                             });
                                         } else { // Do nothing, inform client
                                             // throw new Error ("Pointer already exists, ignoring");
-                                            throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.NOTICE, 
+                                            throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.NOTICE,
                                                 newPointer ? newPointer.id : "", "Duplicate pointer, ignoring");
                                         }
                                     } else {
                                         // throw err;
-                                        throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ERROR_RETRIVING_POINTERS, 
+                                        throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ERROR_RETRIVING_POINTERS,
                                             newPointer ? newPointer.id : "", "");
                                     }
                                 } catch (e) {
@@ -310,7 +290,7 @@ module.exports = class PointerStorageManagement {
                             });
                         } else {
                             // throw new Error("invalid timestamp");
-                            throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER, 
+                            throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER,
                                 newPointer ? newPointer.id : "", "Pointer timestamp is not within threshold");
                         }
                     } else if (filterActionPublish.action == StorageNodeFilter.POINTER_PUBLISH_DENY) {
@@ -323,15 +303,15 @@ module.exports = class PointerStorageManagement {
                         throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.ACTION_NOT_ALLOWED,
                             newPointer ? newPointer.id : "", ErrorManager.DEFAULT_ACTION_ERRORS.QUOTA_EXCEEDED_POINTER_COUNT);
                     }
-                    
+
                 } else {
                     // throw new Error("Pointer failed verification");
-                    throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER, 
+                    throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER,
                         newPointer ? newPointer.id : "", "Pointer verification failed");
                 }
             } else {
                 // throw new Error("Invalid Pointer");
-                throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER, 
+                throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER,
                     newPointer ? newPointer.id : "", "Pointer object malformed");
             }
         } catch (e) {
@@ -346,12 +326,12 @@ module.exports = class PointerStorageManagement {
         let insertSQLString = 'INSERT INTO Pointers (id, pubkey, `timestamp`, pointerhash, `size`, nonce, signature) ';
         let deleteSQLString = 'DELETE FROM Pointers WHERE id in (?)';
         try {
-            if (oldPointerId && newPointerObject && newPointerObject.id){
+            if (oldPointerId && newPointerObject && newPointerObject.id) {
                 if (pointertools.verifySignature(newPointerObject)) {
                     // Should I check if the blob exists?
                     let filterActionReplace = this.PubKeyFilter.filterPointerByAction(newPointerObject, "replace");
-                    
-                    if (filterActionReplace.action == StorageNodeFilter.POINTER_ACCEPTED){
+
+                    if (filterActionReplace.action == StorageNodeFilter.POINTER_ACCEPTED) {
                         let SQLValues = [
                             newPointerObject.id,
                             newPointerObject.pubkey,
@@ -361,7 +341,7 @@ module.exports = class PointerStorageManagement {
                             newPointerObject.nonce,
                             newPointerObject.signature
                         ];
-        
+
                         this.executePointerQuery(insertSQLString +
                             ' VALUES (?, ?, ?, ?, ?, ?, ?)',
                             SQLValues, (err, response) => {
@@ -386,12 +366,12 @@ module.exports = class PointerStorageManagement {
                             newPointerObject ? newPointerObject.id : "", ErrorManager.DEFAULT_ACTION_ERRORS.REPLACE_ACTION_DENIED);
                     }
                 } else {
-                    throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER, 
+                    throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER,
                         newPointerObject ? newPointerObject.id : "", "Pointer verification failed");
                 }
             } else {
                 // throw new Error("Pointer reference error");
-                throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER, 
+                throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER,
                     newPointerObject ? newPointerObject.id : "", "Pointer object malformed");
             }
         } catch (e) {
@@ -409,24 +389,24 @@ module.exports = class PointerStorageManagement {
         // callback(err, deletedPointerId)
 
         try {
-            if (deletionValidationPointer && pointertools.verifySignature(deletionValidationPointer)){
-                let filterActionDelete = this.PubKeyFilter.filterPointerByAction(deletionValidationPointer,"delete");
+            if (deletionValidationPointer && pointertools.verifySignature(deletionValidationPointer)) {
+                let filterActionDelete = this.PubKeyFilter.filterPointerByAction(deletionValidationPointer, "delete");
 
-                if (filterActionDelete.action == StorageNodeFilter.POINTER_ACCEPTED){
+                if (filterActionDelete.action == StorageNodeFilter.POINTER_ACCEPTED) {
                     let dateNow = Math.floor(Date.now() / 1000);
                     let publicKey = deletionValidationPointer.pubkey;
                     let pointerHash = deletionValidationPointer.pointerhash;
-    
+
                     this.getPointerByPKPH(publicKey, pointerHash, (err, result) => {
                         try {
-                            if (result){
+                            if (result) {
                                 let pointerResult = this._formatSQLResultsIntoPointers([result])[0];
                                 let pointerResultTimeStamp = pointerResult.timestamp;
-    
-                                if (pointerResultTimeStamp < deletionValidationPointer.timestamp 
-                                    && pointerResult.nonce != deletionValidationPointer.nonce  && 
+
+                                if (pointerResultTimeStamp < deletionValidationPointer.timestamp
+                                    && pointerResult.nonce != deletionValidationPointer.nonce &&
                                     Math.abs(dateNow - deletionValidationPointer.timestamp) <= 300 &&
-                                    deletionValidationPointer.nonce < 9 && deletionValidationPointer.nonce >= 0){
+                                    deletionValidationPointer.nonce < 9 && deletionValidationPointer.nonce >= 0) {
                                     this._removePointerInternal(pointerResult, (err, deletedPointerId) => {
                                         if (!err) {
                                             this.updateIndexer(pointerResult.pubkey, -1, -pointerResult.size);
@@ -438,11 +418,11 @@ module.exports = class PointerStorageManagement {
                                 } else {
                                     // throw new Error("Invalid deletion pointer");
                                     throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_DELETION_POINTER,
-                                        deletionValidationPointer ? deletionValidationPointer.id : "", 
+                                        deletionValidationPointer ? deletionValidationPointer.id : "",
                                         "Invalid deletion pointer. Timestamp or Nonce value failed check");
                                 }
                             } else {
-                                throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER, 
+                                throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER,
                                     deletionValidationPointer ? deletionValidationPointer.id : "",
                                     "Pointer does not exist");
                             }
@@ -473,7 +453,7 @@ module.exports = class PointerStorageManagement {
             let deleteSQLString = 'DELETE FROM Pointers WHERE id in (?)';
             let pHashSQLString = 'SELECT id FROM Pointers WHERE pointerhash in (?)';
 
-            if (deletionPointer){
+            if (deletionPointer) {
                 let pointerHash = deletionPointer.pointerhash;
                 let deleteBlob = false;
 
@@ -508,7 +488,7 @@ module.exports = class PointerStorageManagement {
                 // @TODO Come back to this
                 this.executePointerQuery(pHashSQLString, pointerHash, (err, rows) => {
                     if (!err) {
-                        if (rows && rows.length <= 1){ // If it finds more than "itself" leave blob
+                        if (rows && rows.length <= 1) { // If it finds more than "itself" leave blob
                             deleteBlob = true;
                         }
                         this.executePointerQuery(deleteSQLString, deletionPointer.id, (err, response) => {
@@ -541,7 +521,7 @@ module.exports = class PointerStorageManagement {
                 });
             } else {
                 // throw new Error("Invalid Pointer");
-                throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER, 
+                throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER,
                     deletionPointer ? deletionPointer.id : "", "Pointer object malformed");
 
             }
@@ -556,15 +536,15 @@ module.exports = class PointerStorageManagement {
         // Only return one result (as there should only be 1 result)
         // TODO: Log if there are more than one
         // callback (err, result)
-        
+
         let pointerSearchCriteria = {
-            owners:[publicKey],
-            pointerhashes:[pointerHash]
+            owners: [publicKey],
+            pointerhashes: [pointerHash]
         };
 
         this.getPointerByCriteria(pointerSearchCriteria, (err, results) => {
-            if (!err){
-                if (results && results.length > 0){
+            if (!err) {
+                if (results && results.length > 0) {
                     callback(err, results[0]);
                 } else {
                     callback(err, undefined);
@@ -573,9 +553,9 @@ module.exports = class PointerStorageManagement {
         });
     }
 
-    getPointerById(pointerId, callback, reqId = ""){
-        this.getPointerByCriteria({ids:[pointerId]}, (err, results) => {
-            if (results && results.length > 0){
+    getPointerById(pointerId, callback, reqId = "") {
+        this.getPointerByCriteria({ ids: [pointerId] }, (err, results) => {
+            if (results && results.length > 0) {
                 callback(err, results[0]);
             } else {
                 callback(err, undefined);
@@ -583,7 +563,7 @@ module.exports = class PointerStorageManagement {
         }, reqId);
     }
 
-    getPointerByCriteria(criteria, callback, reqId = ""){
+    getPointerByCriteria(criteria, callback, reqId = "") {
         let queryString = "SELECT * FROM Pointers ";
         let limit;
         let criteriaStrings = {};
@@ -606,7 +586,7 @@ module.exports = class PointerStorageManagement {
             }
             if (criteria.size != undefined && Number.isInteger(criteria.size)) {
                 criteriaStrings["size"] = " = " + criteria.size;
-            } else if (criteria.sizelargerthan != undefined  && Number.isInteger(criteria.sizelargerthan)) {
+            } else if (criteria.sizelargerthan != undefined && Number.isInteger(criteria.sizelargerthan)) {
                 criteriaStrings["size"] = " > " + criteria.sizelargerthan;
             } else if (criteria.sizesmallerthan != undefined && Number.isInteger(criteria.sizesmallerthan)) {
                 criteriaStrings["size"] = " < " + criteria.sizesmallerthan;
@@ -616,17 +596,17 @@ module.exports = class PointerStorageManagement {
             }
 
             let criteriaLabels = Object.keys(criteriaStrings);
-            if (criteriaLabels){
+            if (criteriaLabels) {
                 // TODO: Fix Limit 0 issue
                 if (!(criteriaLabels.length == 1 && criteriaStrings["limit"] != undefined) &&
-                criteriaLabels.length > 0){
+                    criteriaLabels.length > 0) {
                     // console.log("Good to go");
                     queryString += " WHERE ";
-                    for (let i = 0; i < criteriaLabels.length; i++){
+                    for (let i = 0; i < criteriaLabels.length; i++) {
                         let thisLabel = criteriaLabels[i];
-        
-                        if (thisLabel == "size" || thisLabel == "timestamp" || thisLabel == "limit"){
-                            if (thisLabel == "limit"){
+
+                        if (thisLabel == "size" || thisLabel == "timestamp" || thisLabel == "limit") {
+                            if (thisLabel == "limit") {
                                 limit = criteriaStrings["limit"];
                             } else {
                                 queryString += ((i > 0) ? " and " : " ") + thisLabel + " " + criteriaStrings[thisLabel];
@@ -639,9 +619,9 @@ module.exports = class PointerStorageManagement {
                     limit = Math.abs(criteriaStrings["limit"]);
                 }
 
-                if (limit){
+                if (limit) {
                     queryString += " limit " + limit;
-                } 
+                }
                 // else {
                 //     queryString += " limit " + 1000;
                 // }
@@ -676,9 +656,9 @@ module.exports = class PointerStorageManagement {
         }
     }
 
-    getBinaryByPointerId(pointerId, callback){
+    getBinaryByPointerId(pointerId, callback) {
         try {
-            if (pointerId){
+            if (pointerId) {
                 this.getPointerById(pointerId, (err, result) => {
                     try {
                         if (!err) {
@@ -686,11 +666,11 @@ module.exports = class PointerStorageManagement {
                                 let pointerHash = result.pointerhash;
                                 this.DataStorageManager.getDataByHash(pointerHash, (err, blob) => {
                                     try {
-                                        if (!err){
+                                        if (!err) {
                                             if (blob) {
-                                                if (blob.length == result.size){
+                                                if (blob.length == result.size) {
                                                     let base64Data = binarytools.getBase64(blob);
-                                                    callback (undefined, pointerHash, base64Data);
+                                                    callback(undefined, pointerHash, base64Data);
                                                 } else {
                                                     // throw new Error ("Blob size mismatch from pointer");
                                                     throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_SIZE,
@@ -720,35 +700,35 @@ module.exports = class PointerStorageManagement {
 
                     } catch (e) {
                         callback(e, undefined, undefined)
-                    } 
+                    }
                 });
             } else {
-            //  throw new Error("Pointer ID missing"); 
-             throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER, 
-                pointerId ? pointerId : "", "Pointer object malformed");
+                //  throw new Error("Pointer ID missing"); 
+                throw ErrorManager.getProtocolError(ErrorManager.ERROR_CODES.INVALID_POINTER,
+                    pointerId ? pointerId : "", "Pointer object malformed");
             }
         } catch (e) {
             callback(e, undefined, undefined);
         }
     }
 
-    _formatSQLResultsIntoPointers(SQLResults){
+    _formatSQLResultsIntoPointers(SQLResults) {
         let pointerArray = [];
 
-        if (SQLResults && SQLResults.length > 0){
-            for (let i = 0; i < SQLResults.length; i++){
+        if (SQLResults && SQLResults.length > 0) {
+            for (let i = 0; i < SQLResults.length; i++) {
                 let thisSQLResult = SQLResults[i];
                 let thisPointer = {
-                    id:thisSQLResult.id,
-                    pubkey:thisSQLResult.pubkey,
-                    timestamp:thisSQLResult.timestamp,
-                    pointerhash:thisSQLResult.pointerhash,
-                    size:thisSQLResult.size,
-                    nonce:thisSQLResult.nonce,
-                    signature:thisSQLResult.signature
+                    id: thisSQLResult.id,
+                    pubkey: thisSQLResult.pubkey,
+                    timestamp: thisSQLResult.timestamp,
+                    pointerhash: thisSQLResult.pointerhash,
+                    size: thisSQLResult.size,
+                    nonce: thisSQLResult.nonce,
+                    signature: thisSQLResult.signature
                 };
 
-                if (pointertools.verifySignature(thisPointer)){
+                if (pointertools.verifySignature(thisPointer)) {
                     pointerArray.push(thisPointer);
                 }
             }
@@ -760,14 +740,14 @@ module.exports = class PointerStorageManagement {
     _formatCriteria(criteriaList, isNum) {
         let sqlCriteria = "";
 
-        if (criteriaList && criteriaList.length > 0){
+        if (criteriaList && criteriaList.length > 0) {
             sqlCriteria += '(';
-            for (let i = 0; i < criteriaList.length; i++){
+            for (let i = 0; i < criteriaList.length; i++) {
                 sqlCriteria += (!isNum ? '"' : '') + criteriaList[i] + (!isNum ? '"' : '') + (i == criteriaList.length - 1 ? '' : ',');
             }
             sqlCriteria += ')';
         } else if (criteriaList.length == 0) {
-            sqlCriteria += '(' +  (!isNum ? '"' : 0) + (!isNum ? '"' : '') + ')';
+            sqlCriteria += '(' + (!isNum ? '"' : 0) + (!isNum ? '"' : '') + ')';
         }
 
         return sqlCriteria;
