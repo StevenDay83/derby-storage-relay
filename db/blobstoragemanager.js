@@ -13,21 +13,23 @@ module.exports.DataStorageManager = class DataStorageManager {
         if (thisHash){
             let dataFilePath = this.getDataPath(thisHash);
             try {
-                if (fs.existsSync(dataFilePath)){
-                    fs.readFile(dataFilePath, (err, rawData) => {
-                        if (!err){
-                            if (binarytools.getDataHash(rawData) == thisHash){
-                                callback(undefined, rawData);
+                fs.stat(dataFilePath, (err) => {
+                    if (!err){
+                        fs.readFile(dataFilePath, (err, rawData) => {
+                            if (!err){
+                                if (binarytools.getDataHash(rawData) == thisHash){
+                                    callback(undefined, rawData);
+                                } else {
+                                    throw new Error ("Hash file mismatch");
+                                }
                             } else {
-                                throw new Error ("Hash file mismatch");
+                                throw err;
                             }
-                        } else {
-                            throw err;
-                        }
-                    });
-                } else {
-                    throw new Error ("Data Block Not Found");
-                }
+                        });
+                    } else  {
+                        throw new Error ("Data Block Not Found");
+                    }
+                });
             } catch (e){
                 callback(e, undefined);
             }
