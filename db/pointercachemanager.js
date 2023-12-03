@@ -33,7 +33,7 @@ class PointerCacheManager {
     getPointerById(pointerId) {
         let requestedPointer;
 
-        if (pointerId && pointerId.length == 64) {
+        if (pointerId && pointerId.length == 64 && pointerId in this.CacheTable) {
             requestedPointer = this.CacheTable[pointerId][0];
             this._updatePointCacheTimestamp(pointerId);
         }
