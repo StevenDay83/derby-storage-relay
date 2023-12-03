@@ -86,18 +86,23 @@ pointerMgr.initializeDatabase((err, newTable) => {
             if (err){
                 console.error(err);
             } else {
-        
-                let thisRelayServer = new RelayServer(GlobalSettings.server, pointerMgr);
-                Logger.WriteInfoLog("Starting Server at host " + GlobalSettings.server.host + 
-                (GlobalSettings.server.port ? ':' + GlobalSettings.server.port : ""));
-                thisRelayServer.startServer(err => {
-                    if (!err){
-                        // console.log("Server started");
-                        Logger.WriteInfoLog("Server started, listening for connections");
-                    } else {
-                        // console.log(err);
-                        Logger.WriteErrorLog("Error starting server: " + err.message);
-                    }
+
+                Logger.WriteInfoLog("Initializing Pointer Cache");
+                pointerMgr.initializeCacheManager((err, cacheCount) => {
+                    Logger.WriteInfoLog(cacheCount + " pointers loaded into cache");
+
+                    let thisRelayServer = new RelayServer(GlobalSettings.server, pointerMgr);
+                    Logger.WriteInfoLog("Starting Server at host " + GlobalSettings.server.host + 
+                    (GlobalSettings.server.port ? ':' + GlobalSettings.server.port : ""));
+                    thisRelayServer.startServer(err => {
+                        if (!err){
+                            // console.log("Server started");
+                            Logger.WriteInfoLog("Server started, listening for connections");
+                        } else {
+                            // console.log(err);
+                            Logger.WriteErrorLog("Error starting server: " + err.message);
+                        }
+                    });
                 });
             }
         });

@@ -5,6 +5,8 @@ const ErrorManager = require('../server/error.js');
 const sha256 = require('sha256');
 const mariaDB = require('mariadb/callback');
 const StorageNodeFilter = require('./filter.js');
+const PointerCacheManager = require('./pointercachemanager.js');
+const Logger = require('../logging/log.js');
 
 module.exports = class PointerStorageManagement {
     constructor(relaySettings, dataStorageManager) {
@@ -30,6 +32,22 @@ module.exports = class PointerStorageManagement {
 
         this.PubKeyFilter.checkForChanges(true);
         // console.log(this.PubKeyFilter);
+
+        this.PointerCache;
+    }
+
+    initializeCacheManager(callback) {
+        this.PointerCache = new PointerCacheManager(this.RelaySettings.cache);
+
+        this.getPointerByCriteria({}, (err, results) => {
+            if (!err) {
+                let pointerCount = this.PointerCache.importPointersIntoCache(results);
+
+                callback(undefined, pointerCount);
+            } else {
+                callback(err);
+            }
+        });
     }
 
     rehashPointerIndexer(callback) {
@@ -208,6 +226,7 @@ module.exports = class PointerStorageManagement {
                                                                                                     if (!err) {
                                                                                                         if (response && response.affectedRows == 1) {
                                                                                                             this.updateIndexer(newPointer.pubkey, 1, newPointer.size);
+                                                                                                            this.PointerCache.addPointerToCache(newPointer);
                                                                                                             callback(undefined, newPointer.id, newPointer.pointerhash);
                                                                                                         } else {
                                                                                                             callback(new Error("SQL Error"), undefined, undefined);
@@ -350,6 +369,8 @@ module.exports = class PointerStorageManagement {
                                         this.executePointerQuery(deleteSQLString, oldPointerId, (err2, response2) => {
                                             if (!err2) {
                                                 if (response2 && response2.affectedRows > 0) {
+                                                    this.PointerCache.removePointerFromCache(oldPointerId);
+                                                    this.PointerCache.addPointerToCache(newPointerObject);
                                                     callback(undefined, newPointerObject.id);
                                                 }
                                             } else {
@@ -494,6 +515,7 @@ module.exports = class PointerStorageManagement {
                         this.executePointerQuery(deleteSQLString, deletionPointer.id, (err, response) => {
                             if (!err) {
                                 if (response && response.affectedRows > 0) {
+                                    this.PointerCache.removePointerFromCache(deletionPointer.id);
                                     if (deleteBlob) {
                                         this.DataStorageManager.deleteData(pointerHash, (err, pHash) => {
                                             if (!err) {
@@ -542,25 +564,38 @@ module.exports = class PointerStorageManagement {
             pointerhashes: [pointerHash]
         };
 
-        this.getPointerByCriteria(pointerSearchCriteria, (err, results) => {
-            if (!err) {
+        let cachedPointer = this.PointerCache.getPointerByPKPH(publicKey, pointerHash);
+
+        if (cachedPointer) {
+            callback(undefined, cachedPointer);
+        } else {
+            this.getPointerByCriteria(pointerSearchCriteria, (err, results) => {
+                if (!err) {
+                    if (results && results.length > 0) {
+                        callback(err, results[0]);
+                    } else {
+                        callback(err, undefined);
+                    }
+                }
+            });
+        }
+        
+    }
+
+    getPointerById(pointerId, callback, reqId = "") {
+        let cachedPointer = this.PointerCache.getPointerById(pointerId);
+
+        if (cachedPointer) {
+            callback(undefined, cachedPointer);
+        } else {
+            this.getPointerByCriteria({ ids: [pointerId] }, (err, results) => {
                 if (results && results.length > 0) {
                     callback(err, results[0]);
                 } else {
                     callback(err, undefined);
                 }
-            }
-        });
-    }
-
-    getPointerById(pointerId, callback, reqId = "") {
-        this.getPointerByCriteria({ ids: [pointerId] }, (err, results) => {
-            if (results && results.length > 0) {
-                callback(err, results[0]);
-            } else {
-                callback(err, undefined);
-            }
-        }, reqId);
+            }, reqId);
+        }
     }
 
     getPointerByCriteria(criteria, callback, reqId = "") {
