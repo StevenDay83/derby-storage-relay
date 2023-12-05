@@ -572,6 +572,7 @@ module.exports = class PointerStorageManagement {
             this.getPointerByCriteria(pointerSearchCriteria, (err, results) => {
                 if (!err) {
                     if (results && results.length > 0) {
+                        this.PointerCache.addPointerToCache(results[0]);
                         callback(err, results[0]);
                     } else {
                         callback(err, undefined);
@@ -590,6 +591,7 @@ module.exports = class PointerStorageManagement {
         } else {
             this.getPointerByCriteria({ ids: [pointerId] }, (err, results) => {
                 if (results && results.length > 0) {
+                    this.PointerCache.addPointerToCache(results[0]);
                     callback(err, results[0]);
                 } else {
                     callback(err, undefined);
