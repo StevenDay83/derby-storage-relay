@@ -86,7 +86,7 @@ class PointerCacheManager {
     }
 
     removeOldCacheItems() {
-        if (this.CacheSettings && this.CacheSettings.cacheTTL){
+        if (this.CacheSettings && this.CacheSettings.pointerCacheTTL){
             let timeNow = Math.floor(Date.now() / 1000);
             let pointerArray = Object.values(this.CacheTable);
             let deletionPointerIdArray = [];
@@ -95,7 +95,7 @@ class PointerCacheManager {
                 let thisPointer = thisPointerCache[0];
                 let timeStamp = thisPointerCache[1];
 
-                if (timeNow - timeStamp > this.CacheSettings.cacheTTL){
+                if (timeNow - timeStamp > this.CacheSettings.pointerCacheTTL){
                     deletionPointerArray.push(thisPointer.id);
                 }
             });

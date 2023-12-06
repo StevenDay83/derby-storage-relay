@@ -15,7 +15,7 @@ module.exports = class StorageRelayServer {
         try {
             this.WSServer = new ws.Server({
                 port:this.ServerSettings.port,
-                backlog:5
+                backlog:20
             });
     
             this.WSServer.on('connection', (socket, req) => {
@@ -38,7 +38,7 @@ module.exports = class StorageRelayServer {
                 socket.on('close', (a,b) => {
                     // console.log("Socket closed");
                     let socketSession = this.SessionManager.getSession(socket);
-                    let remoteAddress = socketSession.remoteInfo ? socketSession.remoteInfo.address : "unknown";
+                    let remoteAddress = socketSession && socketSession.remoteInfo ? socketSession.remoteInfo.address : "unknown";
                     Logger.WriteInfoLog("Connection closed for " + remoteAddress);
                     // TODO: Use Session Manager to get Socket info
                     this.SessionManager.removeSession(socket);

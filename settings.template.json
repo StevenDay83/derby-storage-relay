@@ -22,5 +22,14 @@
    "filter":{
      "filtergroupfile":"./filter.json",
      "filterkeysfile":"./filter_keys.json"
+   },
+   "cache":{
+     "pointerCache":{
+          "cacheTTL":0
+     },
+     "blobCache":{
+          "blobCacheTTL":300,
+          "blobCacheSizeLimit":100000000
+     }
    }
 }

@@ -37,6 +37,7 @@ module.exports = class PointerStorageManagement {
     }
 
     initializeCacheManager(callback) {
+        let pointerCacheSettings = this.RelaySettings.cache && this.RelaySettings.cache.pointerCache ? this.RelaySettings.cache.pointerCache : undefined;
         this.PointerCache = new PointerCacheManager(this.RelaySettings.cache);
 
         this.getPointerByCriteria({}, (err, results) => {

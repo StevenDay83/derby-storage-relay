@@ -61,7 +61,7 @@ try {
 const PointerManager = require("./db/pointermanager.js");
 const { DataStorageManager } = require('./db/blobstoragemanager.js');
 
-let pointerMgr = new PointerManager(GlobalSettings, new DataStorageManager(GlobalSettings.storage));
+let pointerMgr = new PointerManager(GlobalSettings, new DataStorageManager(GlobalSettings));
 
 let testSearch = {ids:["12345"],owners:["6789"],olderthan:1697420666,pointerhashes:["0abcde"],sizelargerthan:10000,limit:10};
 // let testSearch = {limit:10};
