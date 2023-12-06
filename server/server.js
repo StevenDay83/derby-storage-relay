@@ -19,9 +19,8 @@ module.exports = class StorageRelayServer {
             });
     
             this.WSServer.on('connection', (socket, req) => {
-                Logger.WriteInfoLog("New connection from " + req.socket.remoteAddress);
                 let remoteAddress = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
-                
+                Logger.WriteInfoLog("New connection from " + remoteAddress);
                 let remoteInfo = {
                     address:remoteAddress,
                     port:req.socket.remotePort
