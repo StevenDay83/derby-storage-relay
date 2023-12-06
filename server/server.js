@@ -20,10 +20,13 @@ module.exports = class StorageRelayServer {
     
             this.WSServer.on('connection', (socket, req) => {
                 Logger.WriteInfoLog("New connection from " + req.socket.remoteAddress);
+                let remoteAddress = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+                
                 let remoteInfo = {
-                    address:req.socket.remoteAddress,
+                    address:remoteAddress,
                     port:req.socket.remotePort
                 };
+
                 // Todo, add socket req infomation
                 this.SessionManager.addNewSession(socket, remoteInfo);
     
@@ -35,7 +38,9 @@ module.exports = class StorageRelayServer {
 
                 socket.on('close', (a,b) => {
                     // console.log("Socket closed");
-                    Logger.WriteInfoLog("Connection closed");
+                    let socketSession = this.SessionManager.getSession(socket);
+                    let remoteAddress = socketSession.remoteInfo ? socketSession.remoteInfo.address : "unknown";
+                    Logger.WriteInfoLog("Connection closed for " + remoteAddress);
                     // TODO: Use Session Manager to get Socket info
                     this.SessionManager.removeSession(socket);
                 });

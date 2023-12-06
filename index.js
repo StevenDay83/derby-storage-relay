@@ -47,13 +47,13 @@ function loadSettings() {
     }
 }
 
-Logger.WriteInfoLog("Loading log file from " + SettingsJSONFile);
+Logger.WriteInfoLog("Loading settings file from " + SettingsJSONFile);
 
 try {
     loadSettings();
     Logger.WriteInfoLog("Settings loaded");
 } catch (e) {
-    Logger.WriteErrorLog("Error loading log file: " + e.message);
+    Logger.WriteErrorLog("Error loading settings file: " + e.message);
 }
 
 // console.log(JSON.stringify(GlobalSettings, undefined, 4));
@@ -78,9 +78,9 @@ pointerMgr.initializeDatabase((err, newTable) => {
     if (!err){
         Logger.WriteInfoLog("Connection to database " + GlobalSettings.database.pointerDatabase + ": OK");
         if (newTable){
-            Logger.WriteInfoLog("Database table for pointers present");
+            Logger.WriteInfoLog("Database table for pointers: PRESENT");
         } else {
-            Logger.WriteInfoLog("Database table for pointers created");
+            Logger.WriteInfoLog("Database table for pointers: CREATED");
         }
         pointerMgr.rehashPointerIndexer(err => {
             if (err){
@@ -89,7 +89,12 @@ pointerMgr.initializeDatabase((err, newTable) => {
 
                 Logger.WriteInfoLog("Initializing Pointer Cache");
                 pointerMgr.initializeCacheManager((err, cacheCount) => {
-                    Logger.WriteInfoLog(cacheCount + " pointers loaded into cache");
+                    if (err) {
+                        Logger.WriteErrorLog("Error Loading Cache");
+                        Logger.WriteErrorLog("WARNING: Performance my be degraded");
+                    } else {
+                        Logger.WriteInfoLog(cacheCount + " pointers loaded into cache");
+                    }
 
                     let thisRelayServer = new RelayServer(GlobalSettings.server, pointerMgr);
                     Logger.WriteInfoLog("Starting Server at host " + GlobalSettings.server.host + 
