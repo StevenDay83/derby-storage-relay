@@ -2,6 +2,7 @@ const ws = require('ws');
 const ErrorManager = require('./error');
 const PROTOCOL_MESSAGE = require('./protocol.js');
 const Logger = require('../logging/log.js');
+const IPFilter = require('./ipfilter.js');
 
 module.exports = class StorageRelayServer {
     constructor(serverSettings, pointerManager){
@@ -9,6 +10,9 @@ module.exports = class StorageRelayServer {
         this.PointerManager = pointerManager;
         this.SessionManager = new SessionManager(serverSettings);
         this.WSServer;
+        this.IPFilter = new IPFilter(serverSettings.filter && serverSettings.serverSettings.filteripfile ? 
+            serverSettings.serverSettings.filteripfile : "ipfilter.json");
+        this.IPFilter.initializeIPFilter();
     }
 
     startServer(callback){
@@ -20,29 +24,36 @@ module.exports = class StorageRelayServer {
     
             this.WSServer.on('connection', (socket, req) => {
                 let remoteAddress = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+                console.log(req.socket);
                 Logger.WriteInfoLog("New connection from " + remoteAddress);
                 let remoteInfo = {
                     address:remoteAddress,
                     port:req.socket.remotePort
                 };
 
-                // Todo, add socket req infomation
-                this.SessionManager.addNewSession(socket, remoteInfo);
+                if (this.IPFilter.filterIPAddress(remoteAddress)){
+                    // Todo, add socket req infomation
+                    this.SessionManager.addNewSession(socket, remoteInfo);
+        
+                    socket.on('message', newMessage => {
+                        this.SessionManager.updateSessionTime(socket);
+                        // Handle Message
+                        this.handleMessage(socket, newMessage);
+                    });
     
-                socket.on('message', newMessage => {
-                    this.SessionManager.updateSessionTime(socket);
-                    // Handle Message
-                    this.handleMessage(socket, newMessage);
-                });
+                    socket.on('close', (a,b) => {
+                        // console.log("Socket closed");
+                        let socketSession = this.SessionManager.getSession(socket);
+                        let remoteAddress = socketSession && socketSession.remoteInfo ? socketSession.remoteInfo.address : "unknown";
+                        Logger.WriteInfoLog("Connection closed for " + remoteAddress);
+                        // TODO: Use Session Manager to get Socket info
+                        this.SessionManager.removeSession(socket);
+                    });
+                } else {
+                    Logger.WriteErrorLog("Rejected IP Address " + remoteAddress);
+                    socket.terminate();
+                }
 
-                socket.on('close', (a,b) => {
-                    // console.log("Socket closed");
-                    let socketSession = this.SessionManager.getSession(socket);
-                    let remoteAddress = socketSession && socketSession.remoteInfo ? socketSession.remoteInfo.address : "unknown";
-                    Logger.WriteInfoLog("Connection closed for " + remoteAddress);
-                    // TODO: Use Session Manager to get Socket info
-                    this.SessionManager.removeSession(socket);
-                });
     
             });
             callback(undefined);
