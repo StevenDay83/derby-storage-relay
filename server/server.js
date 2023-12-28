@@ -18,6 +18,7 @@ module.exports = class StorageRelayServer {
     startServer(callback){
         try {
             this.WSServer = new ws.Server({
+                host:this.ServerSettings.host || '0.0.0.0',
                 port:this.ServerSettings.port,
                 backlog:20
             });
