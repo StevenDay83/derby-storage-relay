@@ -2,7 +2,8 @@
    "server":{
         "host":"0.0.0.0",
         "port":8080,
-        "sessionTimeout":30000
+        "sessionTimeout":30000,
+        "filteripfile":"./ipfilter.json"
    },
    "storage":{
         "directory":"./BlobData",
@@ -13,11 +14,16 @@
         "timestampDelta":300
    },
    "database":{
-    "host":"localhost",
-    "port":3306,
-    "username":"username",
-    "password":"password",
-    "pointerDatabase":"pointer_db"
+        "type":"sqlite",
+        "file":"./pointers.db"
+   },
+   "database_mariadb_example":{
+        "type":"mariadb",
+        "host":"localhost",
+        "port":3306,
+        "username":"username",
+        "password":"password",
+        "pointerDatabase":"pointer_db"
    },
    "filter":{
      "filtergroupfile":"./filter.json",
@@ -25,7 +31,8 @@
    },
    "cache":{
      "pointerCache":{
-          "cacheTTL":0
+          "pointerCacheTTL":300,
+          "maxPointers":10000
      },
      "blobCache":{
           "blobCacheTTL":300,

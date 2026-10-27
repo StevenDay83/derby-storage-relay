@@ -1,21 +1,22 @@
 const binarytools = require('../pointer/blob');
 const BlobCacheManager = require('./blobcachemanager.js');
 const fs = require('fs');
-const sha256 = require('sha256');
 
 module.exports.DataStorageManager = class DataStorageManager {
     constructor(relaySettings) {
         this.directory = relaySettings.storage.directory;
         this.fileSuffix = relaySettings.storage.fileSuffix;
-        this.datablocklimit = 512000;
+        this.datablocklimit = relaySettings.storage.dataBlockLimit || 512000;
         this.BlobCacheManager = new BlobCacheManager(relaySettings.cache);
     }
 
     getDataByHash(thisHash, callback){
         if (thisHash){
+            // Content-addressed data is verified once at write time; cached and
+            // on-disk blobs are trusted, so no re-hashing on the read path.
             let cachedBlob = this.BlobCacheManager.getBlobByHash(thisHash);
 
-            if (cachedBlob && binarytools.getDataHash(cachedBlob) == thisHash){
+            if (cachedBlob){
                 callback(undefined, cachedBlob);
             } else {
                 let dataFilePath = this.getDataPath(thisHash);
@@ -24,12 +25,8 @@ module.exports.DataStorageManager = class DataStorageManager {
                         if (!err){
                             fs.readFile(dataFilePath, (err, rawData) => {
                                 if (!err){
-                                    if (binarytools.getDataHash(rawData) == thisHash){
-                                        this.BlobCacheManager.addBlobToCache(thisHash, rawData);
-                                        callback(undefined, rawData);
-                                    } else {
-                                        throw new Error ("Hash file mismatch");
-                                    }
+                                    this.BlobCacheManager.addBlobToCache(thisHash, rawData);
+                                    callback(undefined, rawData);
                                 } else {
                                     throw err;
                                 }

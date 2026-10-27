@@ -1,41 +1,27 @@
-const PointerTools = require("../pointer/pointer.js");
-
 class PointerCacheManager {
     constructor(cacheSettings){
-        this.CacheTable = {};
-        this.CacheTimeStampTable = {};
-        this.CacheSettings = cacheSettings;
+        this.CacheSettings = cacheSettings || {};
+        let pointerCacheSettings = this.CacheSettings.pointerCache || {};
+
+        this.CacheTTL = pointerCacheSettings.pointerCacheTTL != undefined ? pointerCacheSettings.pointerCacheTTL :
+            (pointerCacheSettings.cacheTTL != undefined ? pointerCacheSettings.cacheTTL : 0);
+        this.MaxPointers = pointerCacheSettings.maxPointers != undefined && pointerCacheSettings.maxPointers > 0 ?
+            pointerCacheSettings.maxPointers : 10000;
+
+        // Map preserves insertion order; the first key is the least recently
+        // used, which makes LRU eviction O(1) per evicted entry.
+        this.CacheTable = new Map();
 
         setInterval(() => this.removeOldCacheItems(), 10000);
-    }
-
-    importPointersIntoCache(pointersArray) {
-        let cacheCount = 0;
-
-        if (pointersArray && Array.isArray(pointersArray) && pointersArray.length > 0){
-            let newCacheTable = {};
-
-            pointersArray.forEach(thisPointer => {
-                if (PointerTools.verifySignature(thisPointer)){
-                    newCacheTable[thisPointer.id] = [thisPointer, Math.floor(Date.now() / 1000)];
-                }
-            });
-
-            cacheCount = Object.keys(newCacheTable).length;
-            if (cacheCount > 0){
-                this.CacheTable = newCacheTable;
-            }
-        }
-
-        return cacheCount;
     }
 
     getPointerById(pointerId) {
         let requestedPointer;
 
-        if (pointerId && pointerId.length == 64 && pointerId in this.CacheTable) {
-            requestedPointer = this.CacheTable[pointerId][0];
-            this._updatePointCacheTimestamp(pointerId);
+        if (pointerId && pointerId.length == 64 && this.CacheTable.has(pointerId)) {
+            let cacheEntry = this.CacheTable.get(pointerId);
+            requestedPointer = cacheEntry.pointer;
+            this._updatePointerCacheTimestamp(pointerId);
         }
 
         return requestedPointer;
@@ -44,8 +30,23 @@ class PointerCacheManager {
     addPointerToCache(newPointer) {
         let success = false;
 
-        if (PointerTools.verifySignature(newPointer)){
-            this.CacheTable[newPointer.id] = [newPointer, Math.floor(Date.now() / 1000)];
+        if (newPointer && newPointer.id && newPointer.id.length == 64) {
+            if (this.CacheTable.has(newPointer.id)) {
+                this.CacheTable.delete(newPointer.id);
+            }
+
+            this.CacheTable.set(newPointer.id, {
+                pointer: newPointer,
+                timestamp: Math.floor(Date.now() / 1000)
+            });
+
+            // Evict least recently used entries once the cache is full.
+            // The database is the source of truth, so eviction is lossless.
+            while (this.CacheTable.size > this.MaxPointers) {
+                let oldestKey = this.CacheTable.keys().next().value;
+                this.CacheTable.delete(oldestKey);
+            }
+
             success = true;
         }
 
@@ -56,47 +57,21 @@ class PointerCacheManager {
         let success = false;
 
         if (deletePointerId && deletePointerId.length == 64){
-            if (deletePointerId in this.CacheTable){
-                delete this.CacheTable[deletePointerId];
-
-                success = true;
-            }
+            success = this.CacheTable.delete(deletePointerId);
         }
 
         return success;
     }
 
-    getPointerByPKPH(publicKey, pointerHash) {
-        let pointersArray = Object.values(this.CacheTable);
-        let requestedPointer;
-
-        pointersArray.every(thisPointerCache => {
-            let thisPointer = thisPointerCache[0];
-            let foundPointer = (thisPointer.pubkey == publicKey && thisPointer.pointerhash == pointerHash);
-
-            if (foundPointer){
-                requestedPointer = thisPointer;
-                this._updatePointCacheTimestamp(foundPointer.id);
-            }
-
-            return foundPointer;
-        });
-
-        return requestedPointer;
-    }
-
     removeOldCacheItems() {
-        if (this.CacheSettings && this.CacheSettings.pointerCacheTTL){
+        // A TTL of 0 disables time-based eviction
+        if (this.CacheTTL > 0){
             let timeNow = Math.floor(Date.now() / 1000);
-            let pointerArray = Object.values(this.CacheTable);
             let deletionPointerIdArray = [];
 
-            pointerArray.forEach(thisPointerCache => {
-                let thisPointer = thisPointerCache[0];
-                let timeStamp = thisPointerCache[1];
-
-                if (timeNow - timeStamp > this.CacheSettings.pointerCacheTTL){
-                    deletionPointerArray.push(thisPointer.id);
+            this.CacheTable.forEach((cacheEntry, pointerId) => {
+                if (timeNow - cacheEntry.timestamp > this.CacheTTL){
+                    deletionPointerIdArray.push(pointerId);
                 }
             });
 
@@ -106,10 +81,16 @@ class PointerCacheManager {
         }
     }
 
-    _updatePointCacheTimestamp(pointerId){
-        let timeNow = Math.floor(Date.now() / 1000);
+    _updatePointerCacheTimestamp(pointerId){
+        let cacheEntry = this.CacheTable.get(pointerId);
 
-        this.CacheTable[pointerId][1] = timeNow;
+        if (cacheEntry){
+            cacheEntry.timestamp = Math.floor(Date.now() / 1000);
+
+            // Refresh LRU position
+            this.CacheTable.delete(pointerId);
+            this.CacheTable.set(pointerId, cacheEntry);
+        }
     }
 }
 

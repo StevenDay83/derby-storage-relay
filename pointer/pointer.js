@@ -1,5 +1,5 @@
 // module.exports = function p() {console.log("Hi")};
-const sha256 = require('sha256');
+const crypto = require('crypto');
 const BigInteger = require('bigi');
 const schnorr = require('bip-schnorr');
 const nostrtools = require('nostr-tools');
@@ -9,7 +9,7 @@ module.exports.generatePointerId = function (pointerObject){
 
     if (checkForAttributes(pointerObject)){
         var pointerJSON = getOrderedJSONString(pointerObject);
-        genID = sha256(pointerJSON);
+        genID = crypto.createHash('sha256').update(pointerJSON, 'utf8').digest('hex');
     }
     // TODO throw error if not valid
     return genID;

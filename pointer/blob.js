@@ -1,10 +1,10 @@
-const sha256 = require('sha256');
+const crypto = require('crypto');
 
 module.exports.getDataHash = function (bufferData){
     let bufHash;
 
     if (Buffer.isBuffer(bufferData)){
-        bufHash = sha256(bufferData);
+        bufHash = crypto.createHash('sha256').update(bufferData).digest('hex');
     }
 
     return bufHash;

@@ -10,8 +10,7 @@ module.exports = class StorageRelayServer {
         this.PointerManager = pointerManager;
         this.SessionManager = new SessionManager(serverSettings);
         this.WSServer;
-        this.IPFilter = new IPFilter(serverSettings.filter && serverSettings.serverSettings.filteripfile ? 
-            serverSettings.serverSettings.filteripfile : "ipfilter.json");
+        this.IPFilter = new IPFilter(serverSettings.filteripfile || "ipfilter.json");
         this.IPFilter.initializeIPFilter();
     }
 
@@ -296,58 +295,54 @@ module.exports = class StorageRelayServer {
 class SessionManager {
     constructor(serverSettings) {
         this.ServerSettings = serverSettings;
-        this.CurrentSessions = {};
+        // Keyed by the socket object itself; a plain object would coerce
+        // every socket key to "[object Object]" and collide.
+        this.CurrentSessions = new Map();
 
         setInterval(() => this.removeIdleSessions(), 10000);
     }
 
     addNewSession(socket, remoteInfo = {address: undefined, port: undefined}) {
-        this.CurrentSessions[socket] = {
+        this.CurrentSessions.set(socket, {
             socket:socket,
             timeout:Math.floor(Date.now() / 1000),
             remoteInfo: {
                 address: remoteInfo.address,
                 port: remoteInfo.port
             }
-        };
+        });
     }
 
     removeSession(socket){
-        if (socket && this.CurrentSessions[socket]){
-            let thisSocket = this.CurrentSessions[socket].socket;
-            // thisSocket.terminate();
+        if (socket && this.CurrentSessions.has(socket)){
+            let thisSocket = this.CurrentSessions.get(socket).socket;
             thisSocket.terminate();
-            delete this.CurrentSessions[socket];
+            this.CurrentSessions.delete(socket);
         }
     }
 
     updateSessionTime(socket){
-        if (socket && this.CurrentSessions[socket]){
-            this.CurrentSessions[socket].timeout = Math.floor(Date.now() / 1000);
+        if (socket && this.CurrentSessions.has(socket)){
+            this.CurrentSessions.get(socket).timeout = Math.floor(Date.now() / 1000);
         }
     }
 
     getSession(socket){
-        if (socket && this.CurrentSessions[socket]){
-            return this.CurrentSessions[socket];
+        if (socket && this.CurrentSessions.has(socket)){
+            return this.CurrentSessions.get(socket);
         }
     }
 
     removeIdleSessions(){
-        // console.log("In removeIdleSessions()");
-        if (Object.keys(this.CurrentSessions)){
-            Object.keys(this.CurrentSessions).forEach(thisSocket => {
-                let lastUpdatedTime = this.CurrentSessions[thisSocket].timeout;
-                // let idleTime = Math.floor((Date.now() - lastUpdatedTime)) * 1000;
-                let idleTime = Math.floor((Date.now() / 1000) - lastUpdatedTime);
-                if (idleTime > this.ServerSettings.sessionTimeout){
-                    let remoteAddr = this.CurrentSessions[thisSocket].remoteInfo.address;
-                    let remotePort = this.CurrentSessions[thisSocket].remoteInfo.port;
-                    Logger.WriteInfoLog("Disconnecting idle session from " + remoteAddr + ':' + remotePort);
-                    this.removeSession(thisSocket);
-                }
-            });
-        }
+        this.CurrentSessions.forEach((session, sessionSocket) => {
+            let idleTime = Math.floor((Date.now() / 1000) - session.timeout);
+            if (idleTime > this.ServerSettings.sessionTimeout){
+                let remoteAddr = session.remoteInfo.address;
+                let remotePort = session.remoteInfo.port;
+                Logger.WriteInfoLog("Disconnecting idle session from " + remoteAddr + ':' + remotePort);
+                this.removeSession(sessionSocket);
+            }
+        });
     }
 
     test(){

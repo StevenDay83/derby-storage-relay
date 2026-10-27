@@ -41,6 +41,7 @@ class KeysFilterManager {
         this.FilterKeysFiles = GlobalSettings.filter.filterkeysfile;
         this.FilterGroup = DEFAULT_FILTER_GROUP;
         this.PublicKeysFilter;
+        this.PublicKeyToGroup = new Map();
         this.PointerIndexer = pointerIndexer;
         this.checkForChangesInterval;
     }
@@ -91,6 +92,7 @@ class KeysFilterManager {
 
             if (filterKeys && Object.keys(filterKeys).length > 0){
                 this.PublicKeysFilter = filterKeys;
+                this._buildPublicKeyGroupMap();
             } 
         } catch (e) {
             throw e;
@@ -114,27 +116,33 @@ class KeysFilterManager {
         }
     }
 
-    getFilterGroupByPubkey(publicKey) {
-        let thisFilterGroup = this.FilterGroup.default;
+    // Precompute pubkey -> group so a filter lookup is a single Map get
+    // instead of a scan of every key list on every publish/delete/replace.
+    // First group a key appears in wins, matching the previous behavior.
+    _buildPublicKeyGroupMap() {
+        let newKeyGroupMap = new Map();
 
-        // First group a key is found in is selected.
+        if (this.PublicKeysFilter){
+            Object.keys(this.PublicKeysFilter).forEach(thisGroup => {
+                if (this.FilterGroup[thisGroup]){
+                    let thisKeyArray = this.PublicKeysFilter[thisGroup];
 
-        Object.keys(this.PublicKeysFilter).every(thisGroup => {
-            if (this.FilterGroup[thisGroup]){
-                let thisKeyArray = this.PublicKeysFilter[thisGroup];
-
-                if (thisKeyArray && thisKeyArray.length > 0 && thisKeyArray.indexOf(publicKey) != -1) {
-                    thisFilterGroup = this.FilterGroup[thisGroup];
-                    return false;
-                } else {
-                    return true;
+                    if (thisKeyArray && thisKeyArray.length > 0){
+                        thisKeyArray.forEach(thisKey => {
+                            if (!newKeyGroupMap.has(thisKey)){
+                                newKeyGroupMap.set(thisKey, this.FilterGroup[thisGroup]);
+                            }
+                        });
+                    }
                 }
-            } else {
-                return true;
-            }
-        });
+            });
+        }
 
-        return thisFilterGroup;
+        this.PublicKeyToGroup = newKeyGroupMap;
+    }
+
+    getFilterGroupByPubkey(publicKey) {
+        return this.PublicKeyToGroup.get(publicKey) || this.FilterGroup.default;
     }
 
     filterPointerByAction(pointer, action){

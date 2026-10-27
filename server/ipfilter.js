@@ -10,7 +10,7 @@ class IPFilter {
 
     initializeIPFilter(){
         this._loadIPFilterLists();
-        setInterval(() => this._loadIPFilterLists, 30000);
+        setInterval(() => this._loadIPFilterLists(), 30000);
     }
 
     filterIPAddress(ipAddress) {
