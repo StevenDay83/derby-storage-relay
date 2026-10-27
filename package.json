@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "smoke": "node scripts/smoke.js"
+    "smoke": "node scripts/smoke.js",
+    "build:binaries": "bun build --compile --target=bun-darwin-arm64 index.js --outfile dist/bin/derby-relay-macos-arm64 && bun build --compile --target=bun-darwin-x64 index.js --outfile dist/bin/derby-relay-macos-x64 && bun build --compile --target=bun-linux-x64 index.js --outfile dist/bin/derby-relay-linux-x64 && bun build --compile --target=bun-windows-x64 index.js --outfile dist/bin/derby-relay-windows-x64.exe"
   },
   "author": "Steven Day",
   "license": "BSD-2-Clause",

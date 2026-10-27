@@ -1,0 +1,7 @@
+{
+  "compilerOptions": {
+    "paths": {
+      "js-sha256": ["./shims/js-sha256.js"]
+    }
+  }
+}

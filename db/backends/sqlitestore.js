@@ -1,4 +1,10 @@
-const Database = require('better-sqlite3');
+// SQLite driver selection: bun-compiled standalone binaries cannot load
+// better-sqlite3's native Node-API addon, so under the Bun runtime we use the
+// built-in bun:sqlite module instead. Both expose the better-sqlite3-style
+// API (prepare().run/get/all, transaction()), so the rest of this backend is
+// identical either way.
+const IS_BUN = typeof Bun !== 'undefined';
+const Database = IS_BUN ? require('bun:sqlite').Database : require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 const Logger = require('../../logging/log.js');
@@ -39,7 +45,12 @@ class SQLitePointerStore {
             }
 
             this.DB = new Database(this.DatabaseFile);
-            this.DB.pragma('journal_mode = WAL');
+            if (typeof this.DB.pragma == 'function') {
+                this.DB.pragma('journal_mode = WAL');
+            } else {
+                // bun:sqlite has no pragma() helper
+                this.DB.exec('PRAGMA journal_mode = WAL');
+            }
 
             let tableExisted = this.DB.prepare(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='Pointers'"
