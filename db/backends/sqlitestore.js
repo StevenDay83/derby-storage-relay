@@ -1,4 +1,7 @@
 const Database = require('better-sqlite3');
+const fs = require('fs');
+const path = require('path');
+const Logger = require('../../logging/log.js');
 const { buildCriteriaQuery } = require('./pointerstore.js');
 
 const CREATE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS Pointers (
@@ -28,6 +31,13 @@ class SQLitePointerStore {
 
     init(callback) {
         try {
+            let databaseDirectory = path.dirname(path.resolve(this.DatabaseFile));
+
+            if (!fs.existsSync(databaseDirectory)) {
+                Logger.WriteInfoLog("SQLite database directory " + databaseDirectory + " does not exist, creating it");
+                fs.mkdirSync(databaseDirectory, { recursive: true });
+            }
+
             this.DB = new Database(this.DatabaseFile);
             this.DB.pragma('journal_mode = WAL');
 

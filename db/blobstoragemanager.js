@@ -1,5 +1,6 @@
 const binarytools = require('../pointer/blob');
 const BlobCacheManager = require('./blobcachemanager.js');
+const Logger = require('../logging/log.js');
 const fs = require('fs');
 
 module.exports.DataStorageManager = class DataStorageManager {
@@ -7,6 +8,12 @@ module.exports.DataStorageManager = class DataStorageManager {
         this.directory = relaySettings.storage.directory;
         this.fileSuffix = relaySettings.storage.fileSuffix;
         this.datablocklimit = relaySettings.storage.dataBlockLimit || 512000;
+
+        if (!fs.existsSync(this.directory)) {
+            Logger.WriteInfoLog("Blob storage directory " + this.directory + " does not exist, creating it");
+            fs.mkdirSync(this.directory, { recursive: true });
+        }
+
         this.BlobCacheManager = new BlobCacheManager(relaySettings.cache);
     }
 
