@@ -1,7 +1,9 @@
-# derby-storage-relay
+# derby-storage-node
 Derby storage network server node
 
-Derby storage node is a server that allows storage and retrieval of data using crytographically signed pointers.
+Derby is a free and open protocol for storing and retriving data in a crytographically secure way. 
+
+Derby storage node is the server implementation of the Derby protocol.
 
 Usage
 
@@ -11,9 +13,7 @@ Usage
 
 There is no formalized set up yet.
 
-This will be a quick guide to get a basic storage node set up for testing purposes.
-
-**Do not use this for any meaningful data in production. Things WILL break**
+This will be a quick guide to get a basic storage node.
 
 ### Settings
 
@@ -28,7 +28,8 @@ Here's what it looks like:
    "server":{
         "host":"0.0.0.0",
         "port":8080,
-        "sessionTimeout":30000
+        "sessionTimeout":30000,
+        "filteripfile":"./ipfilter.json"
    },
    "storage":{
         "directory":"./BlobData",
@@ -39,15 +40,34 @@ Here's what it looks like:
         "timestampDelta":300
    },
    "database":{
-    "host":"localhost",
-    "port":3306,
-    "username":"username",
-    "password":"password",
-    "pointerDatabase":"pointer_db"
+        "type":"sqlite",
+        "file":"./Database/pointers.db"
+   },
+   "database_local":{
+        "type":"sqlite",
+        "file":"./Database/pointers.db"
+   },
+   "database_mariadb":{
+        "type":"mariadb",
+        "host":"127.0.0.1",
+        "port":3306,
+        "username":"dbuser",
+        "password":"fuckoff27",
+        "pointerDatabase":"pointer_db_2"
    },
    "filter":{
      "filtergroupfile":"./filter.json",
      "filterkeysfile":"./filter_keys.json"
+   },
+   "cache":{
+     "pointerCache":{
+          "pointerCacheTTL":300,
+          "maxPointers":10000
+     },
+     "blobCache":{
+          "blobCacheTTL":300,
+          "blobCacheSizeLimit":100000000
+     }
    }
 }
 ```
@@ -55,12 +75,13 @@ Here's what it looks like:
 **server**
 * host - Host to listen to the server on
 * port - TCP/IP port to listen on
-* sessionTimeout - Idle timeout for connections
+* sessionTimeout - Idle timeout for connections in milliseconds
+* filteripfile - IP filter json file for IP access control
 
 **storage**
 * directory - Directory to save data blobs
 * fileSuffix - file suffix to add to blobs. For labeling purposes mostly.
-* dataBlockLimit - Maximum size of data blocks uploaded. In bytes.
+* dataBlockLimit - Maximum size of data blocks uploaded. In bytes. Recommended default is 512000 (512 KB)
 
 **pointer**
 * timestampDelta - Maximum amount of time off from the system time a pointer can be published, in seconds. 300 means that a pointer cannot be published more than 5 minutes in the future of past. 0 means any time can be used and is not recommended outside of personal testing.
@@ -68,15 +89,28 @@ Here's what it looks like:
 **database**
 The storage node uses Maria DB for its backend. Currently it uses TCP/IP and has no option for sockets.
 
+* type - Database types can be "sqlite" for local database, good for small set ups. "mariadb" external SQL database is good for more robust setups.
+* file - Sqlite database file and location.
 * host - Maria DB host to connect to. Some systems require 127.0.0.1 if running on your own system. Others are ok with localhost.
-* port - Maria DB TCP/IP port to connct to.
+* port - Maria DB TCP/IP port to connect to.
 * username - Maria DB username to use for authentication to the database.
 * password - Maria DB password to use for authentication to the database.
-* pointerDatabase - Database to use that will have the `Pointer` table
+* pointerDatabase - Maria DB Database to use that will have the `Pointer` table.
 
 **filter**
 * filtergroupfile - File that has filter group definitions and attributes.
 * filterkeysfile - File that holds public keys in specific groups.
+
+**cache**
+Caching functions for the storage node for quick retrieval and recall of data.
+
+*pointerCache*
+* pointerCacheTTL - Length of time (in seconds) a pointer object will remain in memory cache.
+* maxPointers - Maximum number of pointer objects that can be cached at a time.
+
+*blobCache*
+* blobCacheTTL - Length of time in (in seconds) blob data will be held in cache memory.
+* blobCacheSizeLimit - Total size of blob data that can be cached at a time.
 
 ### Filter Group File
 
@@ -182,7 +216,9 @@ Any public key not applied to a group will go to the default group.
 
 ### Database setup
 
-The Derby storage node users Maria DB as an SQL database backend.
+The Derby storage node uses sqlite or Maria DB as an SQL database backend.
+
+SQLite is a quick set up and is good for small and mostly restricted setups. Maria DB is geared more towards more robust setups where there will be high traffic and high storage.
 
 A basic server setup with a username and password is required. A database needs to be created and added to the settings.json file.
 
